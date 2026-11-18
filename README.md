@@ -37,6 +37,10 @@ If a phone drops, it reconnects to the same hand; a player who stays offline is 
 2. Same file: add a `case` in `applyHouse()` with what it does. End with `return this.advance(n)`.
 3. The lobby toggle, card face and rules text appear automatically (client reads `/meta`).
 
+## Draw until you can play
+
+On by default, switch in the lobby. If nothing in your hand fits the top card, Draw keeps drawing until a card fits, then you may play it or keep it and pass. If you already hold a playable card, a voluntary draw is still one card. Stacked penalties (+2, +4, Draw 12) are always drawn exactly.
+
 ## Round 2: the table
 
 - **Round white table** with players seated around it as avatars (circle, fanned cards, card count). With more than 6 players seats shrink to small circles with the count inside. The seat whose turn it is glows and has a countdown ring.
@@ -46,3 +50,5 @@ If a phone drops, it reconnects to the same hand; a player who stays offline is 
 - **Avatars**: 12 illustrated PNGs (`public/avatars`, sources in `tools/`) or any of 30 emoji. Tap your avatar on the home screen, in the lobby, or via the menu.
 - **Effects** (all drawn on the phone): confetti on a win, storm cloud + red flash + shake for Draw 12, BUSTED stamp, egg splat on a wrong challenge, skip mark, synthesized sounds.
 - Menu has **Sound** and **Effects: reduced** switches. The app has a web manifest so it can be added to the home screen.
+
+- **Card flights:** drawn cards fly from the deck to the player who took them (to your own hand if it is you, face down to opponents). Played cards fly from the hand or seat to the pile and land face up. Worked out on each phone by comparing the new game state with the previous one; turned off by Effects: reduced.

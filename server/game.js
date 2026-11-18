@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS = () => ({
   room: 'living',                  // backdrop behind the table, chosen by the host
   stacking: false,                 // +2 on +2, +4 on +4
   combos: true,                    // play several same-number cards at once
+  drawUntil: true,                 // with nothing playable, keep drawing until you get a card that fits
   challenges: true,                // Wild +4 and Draw 12 can be challenged
   timer: 30,                       // seconds per turn, 0 = off
   lateJoin: true,                  // people can join while a round is running
@@ -467,11 +468,19 @@ class Game {
       this.pending = 0; this.pendingType = null;
       return this.advance(1);
     }
-    const before = p.hand.length;
-    this.drawInto(p, 1);
-    if (p.hand.length === before) { this.say(`${p.name} cannot draw (no cards left).`); return this.advance(1); }
-    const c = p.hand[p.hand.length - 1];
-    this.say(`${p.name} drew a card.`);
+    // With "draw until" on and nothing in hand that fits, keep drawing until a card fits.
+    // If you already hold a playable card, a voluntary draw is still just one card.
+    const chase = this.settings.drawUntil && !p.hand.some((c) => this.isPlayable(c));
+    let drew = 0, c = null;
+    do {
+      const before = p.hand.length;
+      this.drawInto(p, 1);
+      if (p.hand.length === before) break;
+      drew++; c = p.hand[p.hand.length - 1];
+    } while (chase && !this.isPlayable(c));
+    if (!drew) { this.say(`${p.name} cannot draw (no cards left).`); return this.advance(1); }
+    this.say(drew === 1 ? `${p.name} drew a card.` : `${p.name} drew ${drew} cards looking for a play.`);
+    if (drew > 1) this.emit('draw', { to: p.id, n: drew, self: true });
     if (this.isPlayable(c)) this.drawnId = c.id; // may play it or pass
     else this.advance(1);
   }

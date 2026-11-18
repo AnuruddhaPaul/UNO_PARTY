@@ -55,7 +55,12 @@ function onMsg(m) {
     session = { code: m.code, pid: m.pid, token: m.token };
     localStorage.setItem('uno.session', JSON.stringify(session));
     history.replaceState(null, '', '?room=' + m.code); lastSeq = undefined;
-  } else if (m.t === 'state') { S = m; recvAt = performance.now(); render(); keepAwake(); }
+  } else if (m.t === 'state') {
+    const prev = S, rects = {};
+    if (prev) document.querySelectorAll('#hand .card').forEach((el) => { rects[el.dataset.id] = el.getBoundingClientRect(); });
+    S = m; recvAt = performance.now(); render(); keepAwake();
+    try { flyDiff(prev, m, rects); } catch (e) { /* animations are decoration only */ }
+  }
   else if (m.t === 'error') {
     toast(m.msg);
     if (m.code === 'noroom') { session = null; localStorage.removeItem('uno.session'); S = null; paintScene(false); show('home'); }
@@ -123,6 +128,7 @@ function renderLobby() {
   rb.replaceChildren(
     toggleRow('Stack +2 / +4', 'Answer a +2 with another +2 (or +4 with +4) and pass the penalty on.', set.stacking, () => send({ stacking: !set.stacking }), ro),
     toggleRow('Combo play', 'Play two or more cards with the same number together, even in different colors. At least one must match the top card, and you pick which of those colors stays.', set.combos, () => send({ combos: !set.combos }), ro),
+    toggleRow('Draw until you can play', 'Nothing that fits the top card? Keep drawing until you get one that does. If you already hold a playable card, a voluntary draw is just one card.', set.drawUntil, () => send({ drawUntil: !set.drawUntil }), ro),
     toggleRow('Challenge rules', 'Wild +4 and Draw 12 may be played any time. The player they hit can challenge a bluff. Draw 12 is only in the deck when this is on.', set.challenges, () => send({ challenges: !set.challenges }), ro),
     h('div', { class: 'tog' + (ro ? ' ro' : ''), style: 'flex-wrap:wrap' }, h('div', { class: 't' }, h('b', {}, 'Turn timer'), h('span', {}, 'Out of time means draw and pass.')),
       h('div', { class: 'seg' }, [0, 15, 30, 45, 60].map((v) => h('button', { class: set.timer === v ? 'on' : '', onclick: () => !ro && send({ timer: v }) }, v ? v + 's' : 'Off')))),
@@ -242,8 +248,9 @@ function renderCenter() {
   const kids = [];
   for (let k = under; k >= 1; k--) { const e = backEl(); const r = ((n * 53 + k * 37) % 40) - 20; e.style.transform = `rotate(${r}deg) translate(${(k % 2 ? -1 : 1) * 2}px,${k}px)`; kids.push(e); }
   const top = cardOnTable(S.top); top.classList.add('top'); top.style.transform = `rotate(${((n * 29) % 14) - 7}deg)`;
-  if (lastTop !== S.top.id && lastTop !== null) { FX.sound('play'); top.style.animation = 'pop .3s'; }
+  if (lastTop !== S.top.id && lastTop !== null) { FX.sound('play'); top.style.animation = 'land .3s'; }
   lastTop = S.top.id;
+  if (performance.now() < landUntil) { top.style.opacity = 0; clearTimeout(renderCenter.t); renderCenter.t = setTimeout(revealTop, Math.max(0, landUntil - performance.now())); }
   kids.push(top);
   if (S.pending) kids.push(h('div', { class: 'pend' }, '+' + S.pending));
   $('disc').replaceChildren(...kids);
@@ -301,7 +308,7 @@ function renderTable(me) {
   else if (me && me.called && S.hand.length <= 2) acts.append(h('button', { disabled: '' }, 'UNO ✓'));
   if (sc.length) acts.append(h('button', { class: 'primary', onclick: startPlay }, sc.length > 1 ? `Play ${sc.length}` : 'Play'));
   if (S.canPass) acts.append(h('button', { onclick: () => tx({ t: 'pass' }) }, 'Pass'));
-  else if (S.canDraw && !sc.length) acts.append(h('button', { onclick: doDraw }, S.pending ? `Draw ${S.pending}` : 'Draw'));
+  else if (S.canDraw && !sc.length) acts.append(h('button', { onclick: doDraw }, S.pending ? `Draw ${S.pending}` : S.settings.drawUntil && !S.playable.length ? 'Draw until playable' : 'Draw'));
 
   renderChallenge();
   renderEnd();
@@ -386,13 +393,13 @@ function showEvent(e) {
   if (e.type === 'reverse') kids = [e.dir === 1 ? '↻ REVERSE' : '↺ REVERSE'];
   else if (e.type === 'skip') kids = [`⊘ ${nm(e.who)} is skipped`];
   else if (e.type === 'combo') kids = [`COMBO × ${e.n}!`];
-  else if (e.type === 'draw' && e.n >= 4) kids = [`${nm(e.to)} draws ${e.n}!`];
+  else if (e.type === 'draw' && e.n >= 4 && !e.self) kids = [`${nm(e.to)} draws ${e.n}!`];
   else if (e.type === 'busted') kids = ['🚨 BUSTED!', h('div', { style: 'font-size:14px;font-weight:600' }, `${nm(e.by)} was holding`), cardEl(e.card, { info: false }), `${nm(e.by)} draws ${e.n}`];
   else if (e.type === 'failed') kids = [`Wrong call! ${nm(e.to)} draws ${e.n}`];
   const seat = (id) => document.querySelector(`.seat[data-pid="${id}"]`);
   const at = (id, el) => { const s = seat(id); if (!s) return; el.style.left = s.style.left; el.style.top = s.style.top; $('fxl').append(el); setTimeout(() => el.remove(), 2800); };
   if (e.type === 'reverse') FX.sound('reverse');
-  if (e.type === 'draw') { FX.sound('draw'); if (e.n >= 12) { FX.sound('storm'); $('flash').classList.remove('on'); void $('flash').offsetWidth; $('flash').classList.add('on'); const st = $('stage'); st.classList.remove('shk'); void st.offsetWidth; st.classList.add('shk'); at(e.to, h('div', { class: 'cloud' }, '⛈️', h('span', {}, '⚡'))); } }
+  if (e.type === 'draw') { FX.sound('draw'); if (e.n >= 12 && !e.self) { FX.sound('storm'); $('flash').classList.remove('on'); void $('flash').offsetWidth; $('flash').classList.add('on'); const st = $('stage'); st.classList.remove('shk'); void st.offsetWidth; st.classList.add('shk'); at(e.to, h('div', { class: 'cloud' }, '⛈️', h('span', {}, '⚡'))); } }
   if (e.type === 'skip') at(e.who, h('div', { class: 'skipm' }, '⊘'));
   if (e.type === 'busted') { FX.sound('bust'); at(e.by, h('div', { class: 'stamp' }, 'BUSTED')); }
   if (e.type === 'failed') { FX.sound('bust'); at(e.to, h('div', { class: 'splat' }, '🥚')); }
@@ -485,6 +492,74 @@ async function share() {
   try { if (navigator.share) return await navigator.share({ title: 'UNO Party', text, url }); } catch (e) { return; }
   try { await navigator.clipboard.writeText(`${text}\n${url}`); toast('Invite link copied'); } catch { toast(url, 5000); }
 }
+
+
+// ---------- card flight animations ----------
+// Worked out by comparing the previous state with the new one, so the server sends nothing extra.
+// Opponents' cards travel face down from the deck; a card played to the pile travels face up.
+let landUntil = 0;
+const centerOf = (r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+function fly(from, to, opts = {}) {
+  const el = opts.face ? cardEl(opts.face, { info: false, dot: opts.face.color ? null : S.color }) : backEl();
+  const w = opts.w || 46;
+  el.style.cssText += `;--cw:${w}px;position:fixed;left:${-w / 2}px;top:${-w * 0.75}px;z-index:96;pointer-events:none;margin:0`;
+  document.body.append(el);
+  const a = centerOf(from), b = centerOf(to), s0 = (from.width && opts.w ? from.width / w : 1);
+  const rot = opts.rot || 0;
+  const anim = el.animate([
+    { transform: `translate(${a.x}px,${a.y}px) scale(${s0}) rotate(0deg)`, opacity: 1 },
+    { transform: `translate(${b.x}px,${b.y}px) scale(${opts.endScale || 1}) rotate(${rot}deg)`, opacity: 1 },
+  ], { duration: opts.dur || 480, delay: opts.delay || 0, easing: 'cubic-bezier(.25,.8,.3,1)', fill: 'both' });
+  anim.onfinish = () => { el.remove(); if (opts.done) opts.done(); };
+  return anim;
+}
+function flyDiff(prev, next, rects) {
+  if (!prev || FX.lowMotion() || document.hidden || prev.phase !== 'playing' || next.phase !== 'playing' || !prev.hand) return;
+  const deck = $('deck').getBoundingClientRect(), disc = $('disc').getBoundingClientRect();
+  if (!deck.width) return;
+  const seatRect = (pid) => { const e = document.querySelector(`.seat[data-pid="${pid}"] .av`); return e ? e.getBoundingClientRect() : null; };
+  const oldP = Object.fromEntries(prev.players.map((p) => [p.id, p]));
+  const deckDrop = prev.drawCount - next.drawCount;
+  let budget = deckDrop > 0 ? deckDrop : next.drawCount > prev.drawCount ? 99 : 0;   // reshuffle counts as draws, swaps do not
+  const MAX = 8;
+
+  // 1) cards leaving someone's hand for the pile
+  const added = next.played.length > prev.played.length ? next.played.slice(prev.played.length) : [];
+  const myGone = prev.hand.filter((c) => !next.hand.some((x) => x.id === c.id));
+  const gone = []; // {pid, delta}
+  for (const p of next.players) { const o = oldP[p.id]; if (o && p.id !== S.you && p.count < o.count) gone.push({ pid: p.id, n: o.count - p.count }); }
+  if (myGone.length) gone.unshift({ pid: S.you, n: myGone.length });
+  if (added.length && gone.length) {
+    const src = gone[0]; let dur = 520;
+    landUntil = performance.now() + 150 + dur + 140 * Math.min(added.length, 4);
+    added.slice(-4).forEach((e, i) => {
+      const from = src.pid === S.you && myGone[i] && rects[myGone[i].id] ? rects[myGone[i].id] : (seatRect(src.pid) || deck);
+      FX.sound('play');
+      fly(from, disc, { face: e.card, w: 58, delay: i * 140, dur, rot: ((i * 23) % 14) - 7, endScale: 46 / 58, done: i === Math.min(added.length, 4) - 1 ? revealTop : null });
+    });
+  }
+
+  // 2) cards coming from the deck into someone's hand
+  let k = 0;
+  const myNew = next.hand.filter((c) => !prev.hand.some((x) => x.id === c.id));
+  const draws = [];
+  if (myNew.length && budget > 0) { const n = Math.min(myNew.length, budget); draws.push({ pid: S.you, n, cards: myNew.slice(0, n) }); budget -= n; }
+  for (const p of next.players) { const o = oldP[p.id]; if (o && p.id !== S.you && p.count > o.count && budget > 0) { const n = Math.min(p.count - o.count, budget); draws.push({ pid: p.id, n }); budget -= n; } }
+  for (const d of draws) {
+    const n = Math.min(d.n, MAX);
+    for (let i = 0; i < n; i++) {
+      let to, el = null;
+      if (d.pid === S.you) { el = d.cards[i] ? document.querySelector(`#hand .card[data-id="${d.cards[i].id}"]`) : null; to = el ? el.getBoundingClientRect() : $('hand').getBoundingClientRect(); if (el) el.style.opacity = 0; }
+      else to = seatRect(d.pid);
+      if (!to) continue;
+      const delay = 80 + k++ * 110;
+      setTimeout(() => FX.sound('draw'), delay);
+      fly(deck, to, { w: d.pid === S.you ? to.width || 58 : 40, delay, dur: 460, endScale: d.pid === S.you ? 1 : 0.7, done: () => { if (el) el.style.opacity = ''; } });
+    }
+    if (d.pid === S.you) setTimeout(() => document.querySelectorAll('#hand .card').forEach((c) => { c.style.opacity = ''; }), 120 + k * 110 + 520);
+  }
+}
+function revealTop() { landUntil = 0; const t = document.querySelector('#disc .card.top'); if (t) { t.style.opacity = ''; t.style.animation = 'land .3s'; } }
 
 // ---------- wiring ----------
 const myName = () => ($('name').value.trim() || localStorage.getItem('uno.name') || 'Player');

@@ -208,6 +208,44 @@ t('UNO catch window still works when the last-but-one card is a Draw 12', () => 
 });
 
 
+// ---------- draw until you can play ----------
+t('draw-until: with nothing playable you keep drawing until a card fits', () => {
+  const g = setup(num('yellow', 1), 0, [[num('red', 5), num('green', 7)], [num('green', 5)]]);
+  const fit = num('yellow', 9), junk1 = num('red', 2), junk2 = num('blue', 4);
+  g.drawPile.push(fit, junk2, junk1); // pop order: junk1, junk2, fit
+  g.draw(g.players[0].id);
+  assert.equal(g.players[0].hand.length, 5, 'drew 3');
+  assert.equal(g.drawnId, fit.id, 'the fitting card is the drawn card');
+  assert.equal(g.turn, 0, 'still my turn, I may play it');
+  g.play(g.players[0].id, fit.id);
+  assert.equal(g.turn, 1);
+});
+t('draw-until: holding a playable card, a voluntary draw is a single card', () => {
+  const g = setup(num('yellow', 1), 0, [[num('yellow', 5), num('green', 7)], [num('green', 5)]]);
+  g.drawPile.push(num('blue', 4), num('red', 2));
+  g.draw(g.players[0].id);
+  assert.equal(g.players[0].hand.length, 3); assert.equal(g.turn, 1, 'unplayable draw passes the turn');
+});
+t('draw-until off: one card, then the turn passes if it does not fit', () => {
+  const g = setup(num('yellow', 1), 0, [[num('red', 5)], [num('green', 5)]], { drawUntil: false });
+  g.drawPile.push(num('blue', 4), num('red', 2));
+  g.draw(g.players[0].id);
+  assert.equal(g.players[0].hand.length, 2); assert.equal(g.turn, 1);
+});
+t('draw-until: a stacked penalty is still drawn exactly, no chasing', () => {
+  const g = setup(num('yellow', 1), 0, [[num('red', 5)], [num('green', 5)]], { stacking: true });
+  g.pending = 2; g.pendingType = 'draw2';
+  g.drawPile.push(num('yellow', 9), num('yellow', 8), num('yellow', 7));
+  g.draw(g.players[0].id);
+  assert.equal(g.players[0].hand.length, 3); assert.equal(g.turn, 1);
+});
+t('draw-until: ends cleanly when the deck and discards run out', () => {
+  const g = setup(num('yellow', 1), 0, [[num('red', 5)], [num('green', 5)]]);
+  g.drawPile.length = 0; g.discard.length = 1;
+  g.draw(g.players[0].id);
+  assert.equal(g.turn, 1);
+});
+
 // ---------- avatars and rooms ----------
 {
   const { cleanAvatar, AVATAR_PNG, ROOMS } = require('../server/game');

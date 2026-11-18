@@ -124,6 +124,7 @@ function handle(ws, msg) {
         if (typeof msg.stacking === 'boolean') s.stacking = msg.stacking;
         if (typeof msg.lateJoin === 'boolean') s.lateJoin = msg.lateJoin;
         if (typeof msg.combos === 'boolean') s.combos = msg.combos;
+        if (typeof msg.drawUntil === 'boolean') s.drawUntil = msg.drawUntil;
         if (typeof msg.challenges === 'boolean') s.challenges = msg.challenges;
         if ([0, 15, 30, 45, 60].includes(msg.timer)) s.timer = msg.timer;
         if (ROOMS.includes(msg.room)) s.room = msg.room;
