@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { Game, HOUSE_CARDS, MAX_PLAYERS, botMove, apply } = require('./game');
+const { Game, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, MAX_PLAYERS, botMove, apply } = require('./game');
 
 const PORT = process.env.PORT || 3000;
 const SEC = Number(process.env.SEC_MS) || 1000;           // tests shrink this to run timers fast
@@ -19,7 +19,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/health') { res.writeHead(200); return res.end('ok'); }
   if (url.pathname === '/meta') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ house: HOUSE_CARDS, max: MAX_PLAYERS }));
+    return res.end(JSON.stringify({ house: HOUSE_CARDS, max: MAX_PLAYERS, avatars: { emoji: AVATAR_EMOJI, png: AVATAR_PNG }, rooms: ROOMS }));
   }
   let file = url.pathname === '/' ? '/index.html' : url.pathname;
   file = path.normalize(file).replace(/^(\.\.[/\\])+/, '');
@@ -101,7 +101,7 @@ function join(ws, msg) {
     p = g.byId(msg.pid); p.connected = true;
     const old = room.socks.get(p.id); if (old && old !== ws) { old.pid = null; old.close(); }
   } else {
-    try { p = g.addPlayer(name); } catch (e) { return send(ws, { t: 'error', msg: e.message }); }
+    try { p = g.addPlayer(name, { avatar: msg.avatar }); } catch (e) { return send(ws, { t: 'error', msg: e.message }); }
     room.tokens.set(p.id, crypto.randomBytes(12).toString('hex'));
     g.say(`${p.name} joined.`);
   }
@@ -126,6 +126,7 @@ function handle(ws, msg) {
         if (typeof msg.combos === 'boolean') s.combos = msg.combos;
         if (typeof msg.challenges === 'boolean') s.challenges = msg.challenges;
         if ([0, 15, 30, 45, 60].includes(msg.timer)) s.timer = msg.timer;
+        if (ROOMS.includes(msg.room)) s.room = msg.room;
         if (Array.isArray(msg.houseCards)) s.houseCards = msg.houseCards.filter((k) => HOUSE_CARDS[k]);
         if (msg.handSize >= 3 && msg.handSize <= 10) s.handSize = msg.handSize | 0;
         break;
@@ -136,6 +137,7 @@ function handle(ws, msg) {
         g.addPlayer('Bot ' + n, { bot: true });
         break;
       }
+      case 'avatar': g.setAvatar(pid, msg.avatar); break;
       case 'claimhost': {
         const h = g.byId(g.hostId);
         if (h && h.connected) throw new Error('The host is still here.');

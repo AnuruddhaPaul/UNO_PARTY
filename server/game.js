@@ -24,7 +24,21 @@ const HOUSE_CARDS = {
                 desc: 'A player you choose draws 12. You may play it any time, but if you had ANY other playable card (wilds count) and they challenge you, you draw 16 instead. Challenge wrongly and you draw 16. Needs challenge rules on.' },
 };
 
+// ---- Avatars and rooms (what a player can pick) ---------------------------------
+const AVATAR_EMOJI = ['🦊','🐼','🐱','🐶','🦁','🐯','🐸','🐵','🦄','🐙','🐧','🦉','🐢','🦖','🐳','🦋','🐝','🦈','🤖','👽','👻','🥷','🧙','🧛','🎃','🌵','🍕','🍩','🚀','⚡'];
+const AVATAR_PNG = ['fox','panda','cat','owl','robot','astronaut','wizard','pirate','ninja','alien','ghost','dino'];
+const ROOMS = ['living','cafe','rooftop','beach','hostel','lounge'];
+// 'e:🦊' = emoji, 'p:fox' = illustrated PNG in /avatars. Anything else is rejected.
+function cleanAvatar(a) {
+  if (typeof a !== 'string') return null;
+  if (a.startsWith('e:') && AVATAR_EMOJI.includes(a.slice(2))) return a;
+  if (a.startsWith('p:') && AVATAR_PNG.includes(a.slice(2))) return a;
+  return null;
+}
+const randomAvatar = () => 'p:' + AVATAR_PNG[Math.floor(Math.random() * AVATAR_PNG.length)];
+
 const DEFAULT_SETTINGS = () => ({
+  room: 'living',                  // backdrop behind the table, chosen by the host
   stacking: false,                 // +2 on +2, +4 on +4
   combos: true,                    // play several same-number cards at once
   challenges: true,                // Wild +4 and Draw 12 can be challenged
@@ -99,10 +113,10 @@ class Game {
   get top() { return this.discard[this.discard.length - 1]; }
 
   // ---- lobby --------------------------------------------------------------
-  addPlayer(name, { bot = false } = {}) {
+  addPlayer(name, { bot = false, avatar = null } = {}) {
     if (this.players.length >= MAX_PLAYERS) throw new Error(`Room is full (${MAX_PLAYERS} players max).`);
     if (this.phase === 'playing' && !this.settings.lateJoin) throw new Error('Game in progress, late joining is off.');
-    const p = { id: 'p' + this.nextPid++, name, hand: [], connected: true, bot, wins: 0, called: false };
+    const p = { id: 'p' + this.nextPid++, name, hand: [], connected: true, bot, wins: 0, called: false, avatar: cleanAvatar(avatar) || (bot ? 'p:robot' : randomAvatar()) };
     this.players.push(p);
     if (!this.hostId && !bot) this.hostId = p.id;
     if (this.phase === 'playing') {
@@ -110,6 +124,12 @@ class Game {
       this.say(`${p.name} joined the game with ${p.hand.length} cards.`);
     }
     return p;
+  }
+
+  setAvatar(id, avatar) {
+    const p = this.byId(id), a = cleanAvatar(avatar);
+    if (!p || !a) throw new Error('That avatar is not available.');
+    p.avatar = a;
   }
 
   removePlayer(id) {
@@ -503,7 +523,7 @@ class Game {
       host: this.hostId,
       settings: this.settings,
       max: MAX_PLAYERS,
-      players: this.players.map((p) => ({ id: p.id, name: p.name, count: p.hand.length, connected: p.connected, bot: p.bot, wins: p.wins, called: p.called })),
+      players: this.players.map((p) => ({ id: p.id, name: p.name, count: p.hand.length, connected: p.connected, bot: p.bot, wins: p.wins, called: p.called, avatar: p.avatar })),
       turn: this.phase === 'playing' ? this.current.id : null,
       dir: this.dir,
       color: this.color,
@@ -576,4 +596,4 @@ function apply(game, pid, a) {
   else if (a.kind === 'pass') game.pass(pid);
 }
 
-module.exports = { Game, HOUSE_CARDS, COLORS, MAX_PLAYERS, botMove, apply, cardLabel, nameOf };
+module.exports = { Game, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, cleanAvatar, COLORS, MAX_PLAYERS, botMove, apply, cardLabel, nameOf };

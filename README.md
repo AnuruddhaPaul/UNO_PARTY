@@ -36,3 +36,13 @@ If a phone drops, it reconnects to the same hand; a player who stays offline is 
 1. `server/game.js`: add an entry to `HOUSE_CARDS` (name, icon, description, `needs: 'target'` if it targets a player).
 2. Same file: add a `case` in `applyHouse()` with what it does. End with `return this.advance(n)`.
 3. The lobby toggle, card face and rules text appear automatically (client reads `/meta`).
+
+## Round 2: the table
+
+- **Round white table** with players seated around it as avatars (circle, fanned cards, card count). With more than 6 players seats shrink to small circles with the count inside. The seat whose turn it is glows and has a countdown ring.
+- **Colour ring** around the deck and discard pile shows the colour in play; the chevrons spin in the play direction and flip when someone plays Reverse.
+- **Deck and discard pile** drawn as stacks. Only the top discard is face up, the ones under it show the UNO back.
+- **Room backdrops** (host picks in the lobby): Living room, Café, Rooftop night, Beach hut, Hostel lounge, Game lounge. Drawn as SVG in `public/scenes.js`, rendered on each phone, nothing to download.
+- **Avatars**: 12 illustrated PNGs (`public/avatars`, sources in `tools/`) or any of 30 emoji. Tap your avatar on the home screen, in the lobby, or via the menu.
+- **Effects** (all drawn on the phone): confetti on a win, storm cloud + red flash + shake for Draw 12, BUSTED stamp, egg splat on a wrong challenge, skip mark, synthesized sounds.
+- Menu has **Sound** and **Effects: reduced** switches. The app has a web manifest so it can be added to the home screen.

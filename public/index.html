@@ -4,158 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#14161f">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>UNO Party</title>
 <link rel="icon" href="data:,">
-<style>
-:root{
-  --bg:#14161f; --panel:#1e2130; --panel2:#2a2e42; --text:#f2f3f8; --mute:#9aa0b8; --accent:#ffd23f;
-  --red:#e53935; --yellow:#fdd835; --green:#2e9e4f; --blue:#1e78e0;
-  --cw:62px;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none;user-select:none;-webkit-user-select:none;touch-action:manipulation}
-button{font:inherit;color:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--panel2);cursor:pointer}
-button:active{transform:scale(.97)}
-button.primary{background:var(--accent);color:#1b1b1b;font-weight:800}
-button.danger{background:#c62828}
-button:disabled{opacity:.4}
-input{font:inherit;width:100%;padding:13px 14px;border-radius:12px;border:2px solid var(--panel2);background:var(--panel);color:var(--text);outline:none;user-select:text;-webkit-user-select:text}
-input:focus{border-color:var(--accent)}
-.screen{position:fixed;inset:0;display:none;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-.screen.on{display:flex}
-.pad{padding:16px;overflow-y:auto;flex:1}
-h1{margin:6px 0 2px;font-size:34px;letter-spacing:-1px}
-.sub{color:var(--mute);margin:0 0 18px}
-.row{display:flex;gap:10px;align-items:center}
-.row>*{flex:1}
-.card-box{background:var(--panel);border-radius:16px;padding:14px;margin-bottom:12px}
-.lbl{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
-.logo{display:flex;gap:6px;margin:10px 0 4px}
-.logo i{display:block;width:34px;height:48px;border-radius:7px;border:2px solid #fff;transform:rotate(calc(var(--r)*1deg))}
+<link rel="stylesheet" href="style.css">
 
-/* lobby */
-.code{font-size:56px;font-weight:900;letter-spacing:10px;text-align:center;color:var(--accent);margin:2px 0}
-.plist{display:flex;flex-direction:column;gap:6px}
-.pl{display:flex;align-items:center;gap:8px;background:var(--panel2);padding:9px 12px;border-radius:10px}
-.pl .nm{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pl small{color:var(--mute)}
-.pl button{padding:4px 10px;font-size:13px;background:#3a3f5a}
-.tog{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid var(--panel2)}
-.tog:first-of-type{border-top:0}
-.tog .t{flex:1}
-.tog b{display:block}
-.tog span{font-size:13px;color:var(--mute)}
-.sw{width:46px;height:28px;border-radius:14px;background:#444a66;position:relative;flex:none;margin-top:2px;transition:.15s}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.15s}
-.sw.on{background:#34c759}.sw.on::after{left:21px}
-.ro .sw{opacity:.55;pointer-events:none}
-.step{display:flex;align-items:center;gap:10px}
-.step button{width:40px;padding:6px}
-
-/* table */
-#table{background:radial-gradient(ellipse at 50% 35%,#1f6a45 0%,#124a30 60%,#0b2f1f 100%)}
-.top{display:flex;align-items:center;gap:8px;padding:8px 10px}
-.top .chip{background:#0006;padding:6px 10px;border-radius:999px;font-weight:800;letter-spacing:2px}
-.top .sp{flex:1}
-.top button{padding:6px 12px;background:#0006;border-radius:999px}
-.opps{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:0 8px;max-height:25vh;overflow-y:auto}
-.opp{background:#0007;border:2px solid transparent;border-radius:12px;padding:5px 9px;min-width:76px;text-align:center;font-size:12px;position:relative}
-.opp b{display:block;font-size:13px;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 auto}
-.opp .n{font-size:19px;font-weight:900;line-height:1.1}
-.opp.cur{border-color:var(--accent);box-shadow:0 0 14px #ffd23f88}
-.opp.off{opacity:.45}
-.opp .tag{position:absolute;top:-7px;right:-4px;background:#e53935;font-weight:900;font-size:10px;padding:1px 5px;border-radius:6px}
-.mid{flex:1;display:flex;align-items:center;justify-content:center;gap:22px;min-height:120px;position:relative}
-.pile{position:relative;text-align:center}
-.pile .cnt{font-size:12px;color:#cde;margin-top:4px}
-.dirmark{position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:22px;opacity:.7}
-.topwrap{position:relative;text-align:center}
-.ring{position:absolute;inset:-9px;border-radius:16px;border:4px solid var(--c,#fff);box-shadow:0 0 18px var(--c,#fff);pointer-events:none}
-.pend{position:absolute;top:-14px;right:-18px;background:#e53935;font-weight:900;padding:2px 9px;border-radius:999px;border:2px solid #fff;font-size:15px;z-index:3}
-.played{display:flex;gap:8px;overflow-x:auto;padding:6px 10px;background:#0004;scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
-.played .pc{flex:none;text-align:center;font-size:10px;color:#bcd;width:calc(var(--cw)*.55)}
-.played .pc .card{--cw:34px;margin:0 auto 2px}
-.played .pc span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#9cb;padding:4px 12px 0;background:#0004}
-.banner{text-align:center;padding:7px 10px;font-weight:700;font-size:15px;min-height:34px}
-.banner.me{background:var(--accent);color:#1b1b1b;animation:pulse 1.2s infinite}
-@keyframes pulse{50%{filter:brightness(1.2)}}
-.logl{font-size:12px;color:#bcd;text-align:center;padding:2px 10px 4px;min-height:34px}
-.logl div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.logl div:last-child{color:#fff}
-.hand{display:flex;overflow-x:auto;padding:16px 14px 10px;min-height:calc(var(--cw)*1.5 + 36px);align-items:flex-end;background:linear-gradient(#0000,#0008);-webkit-overflow-scrolling:touch}
-.hand .card{flex:none;margin-left:calc(var(--cw)*var(--ov,-.2));transition:transform .12s}
-.hand .card:first-child{margin-left:0}
-.hand .card.sel{transform:translateY(-16px) scale(1.08);z-index:5}
-.hand .card.dim{filter:brightness(.55) saturate(.7)}
-.hand .card.drawn{box-shadow:0 0 0 3px #fff,0 0 14px #fff}
-.acts{display:flex;gap:8px;padding:4px 10px 10px;align-items:center}
-.acts .info{flex:1;font-size:12px;color:#cde;min-height:34px;display:flex;align-items:center}
-.acts button{padding:10px 14px;font-weight:800}
-.uno{background:#e53935;color:#fff;font-size:18px}
-.catch{background:#fff;color:#c62828;animation:pulse .6s infinite}
-.mycount{position:absolute;left:12px;bottom:calc(var(--cw)*1.5 + 52px);font-size:11px;color:#bcd}
-
-/* card */
-.card{--cw:62px;width:var(--cw);height:calc(var(--cw)*1.5);border-radius:calc(var(--cw)*.14);border:calc(var(--cw)*.045) solid #fff;position:relative;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px #0008;color:#fff;font-weight:900;flex:none;background:#333}
-.card.red{background:var(--red)}.card.yellow{background:var(--yellow);color:#2b2300}.card.green{background:var(--green)}.card.blue{background:var(--blue)}
-.card.wild{background:conic-gradient(var(--red) 0 25%,var(--blue) 0 50%,var(--green) 0 75%,var(--yellow) 0)}
-.card.house{background:linear-gradient(160deg,#3d2a72,#14102b);border-color:#d9c7ff}
-.card .m{font-size:calc(var(--cw)*.46);text-shadow:0 2px 0 #0004;line-height:1}
-.card .c{position:absolute;font-size:calc(var(--cw)*.2);line-height:1}
-.card .c.a{top:calc(var(--cw)*.06);left:calc(var(--cw)*.08)}
-.card .c.b{bottom:calc(var(--cw)*.06);right:calc(var(--cw)*.08);transform:rotate(180deg)}
-.card.wild .m,.card.house .m{text-shadow:0 0 6px #000a}
-.card.house .nm{position:absolute;bottom:calc(var(--cw)*.1);left:0;right:0;text-align:center;font-size:calc(var(--cw)*.14);font-weight:800;line-height:1;padding:0 2px;color:#e8dcff}
-.card.house .m{margin-top:calc(var(--cw)*-.15)}
-.card.back{background:#1b1b1b;border-color:#fff}
-.card.back::after{content:"UNO";color:var(--accent);font-size:calc(var(--cw)*.28);transform:rotate(-20deg);background:var(--red);padding:2px 5px;border-radius:50%}
-.card.shake{animation:shake .3s}
-@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-.dot{position:absolute;right:-3px;top:-3px;width:calc(var(--cw)*.3);height:calc(var(--cw)*.3);border-radius:50%;border:2px solid #fff}
-
-/* round 1 additions */
-.card{-webkit-touch-callout:none}
-.hand .card.combo{box-shadow:0 0 0 3px #fff9,0 0 12px var(--accent)}
-.seg{display:flex;gap:6px;width:100%;margin-top:8px}
-.seg button{flex:1;padding:8px 0}
-.seg button.on{background:var(--accent);color:#1b1b1b;font-weight:800}
-.ro .seg{opacity:.55;pointer-events:none}
-.evt{position:fixed;left:50%;top:34%;transform:translate(-50%,-50%);background:#000d;border:3px solid var(--accent);padding:14px 22px;border-radius:18px;font-size:26px;font-weight:900;text-align:center;z-index:90;opacity:0;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:90vw}
-.evt.on{animation:evt 2s ease forwards}
-@keyframes evt{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}12%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}20%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(1)}}
-#ovInfo{z-index:70}
-.infoTxt h3{margin:12px 0 4px}.infoTxt p{margin:0;color:var(--mute);font-size:15px}
-.chbtns{display:grid;gap:8px;margin-top:12px}
-.chbtns small{display:block;font-weight:400;opacity:.8}
-/* sheets & overlays */
-.ov{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end;justify-content:center;z-index:50}
-.ov.on{display:flex}
-.sheet{background:var(--panel);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:85vh;overflow-y:auto}
-.sheet h3{margin:0 0 4px}
-.sheet p{margin:0 0 12px;color:var(--mute);font-size:14px}
-.cols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
-.cols button{height:56px;border:3px solid transparent;border-radius:14px}
-.cols button.s{border-color:#fff;transform:scale(1.07)}
-.tg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.tg button{display:flex;justify-content:space-between;gap:6px;border:3px solid transparent}
-.tg button.s{border-color:var(--accent)}
-.center{align-items:center}
-.modal{background:var(--panel);border-radius:20px;padding:22px;width:min(92vw,420px);text-align:center;margin:auto}
-.win{font-size:42px;margin:0}
-.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 54px);transform:translateX(-50%);background:#000d;padding:10px 16px;border-radius:12px;z-index:100;max-width:88vw;text-align:center;font-size:14px;pointer-events:none;opacity:0;transition:opacity .2s}
-.toast.on{opacity:1}
-.recon{position:fixed;top:0;left:0;right:0;background:#c62828;text-align:center;padding:calc(env(safe-area-inset-top) + 4px) 0 4px;font-size:13px;z-index:200;display:none}
-.recon.on{display:block}
-.rule{padding:6px 0;border-top:1px solid var(--panel2);font-size:14px}
-.rule:first-of-type{border-top:0}
-.rule b{margin-right:4px}
-@media (max-height:640px){:root{--cw:52px}.mid{min-height:90px}}
-@media (min-width:700px){:root{--cw:76px}.screen{max-width:560px;margin:0 auto}}
-</style>
 </head>
 <body>
+<div id="scene"></div>
 <div class="recon" id="recon">Reconnecting…</div>
 <div class="toast" id="toast"></div>
 
@@ -165,8 +24,8 @@ h1{margin:6px 0 2px;font-size:34px;letter-spacing:-1px}
   <h1>UNO Party</h1>
   <p class="sub">Pass-around card game for your friends. Everyone plays on their own phone.</p>
   <div class="card-box">
-    <div class="lbl">Your name</div>
-    <input id="name" maxlength="14" placeholder="e.g. Anu" autocomplete="off">
+    <div class="lbl">Your name &amp; avatar</div>
+    <div class="row" style="gap:12px"><button class="avbtn" id="btnAv" aria-label="Pick avatar"></button><input id="name" maxlength="14" placeholder="e.g. Anu" autocomplete="off"></div>
   </div>
   <div class="card-box">
     <div class="lbl">Start a new game</div>
@@ -194,14 +53,23 @@ h1{margin:6px 0 2px;font-size:34px;letter-spacing:-1px}
 <!-- TABLE -->
 <section class="screen" id="table">
   <div class="top"><div class="chip" id="tcode"></div><div class="sp"></div><button id="btnRules">? Rules</button><button id="btnMenu">⋯</button></div>
-  <div class="opps" id="opps"></div>
-  <div class="mid" id="mid"></div>
-  <div class="plbl">Played so far</div>
-  <div class="played" id="played"></div>
-  <div class="banner" id="banner"></div>
-  <div class="logl" id="logl"></div>
-  <div class="acts" id="acts"></div>
-  <div class="hand" id="hand"></div>
+  <div class="stage" id="stage">
+    <div class="tbl" id="tbl"></div>
+    <div class="ctr" id="ctr">
+      <div class="rwrap" id="rwrap"><svg class="rbase" viewBox="0 0 200 200"><circle cx="100" cy="100" r="92"/></svg><svg class="rspin" viewBox="0 0 200 200" id="rspin"></svg></div>
+      <div class="piles"><div class="deck" id="deck"></div><div class="disc" id="disc"></div></div>
+      <div class="cpill" id="cpill"></div>
+    </div>
+    <div id="seats"></div>
+    <div id="fxl"></div>
+  </div>
+  <div class="dock">
+    <div class="hist" id="hist"><div class="hl" id="histTog"></div><div class="played" id="played"></div></div>
+    <div class="banner" id="banner"></div>
+    <div class="logl" id="logl"></div>
+    <div class="acts" id="acts"></div>
+    <div class="hand" id="hand"></div>
+  </div>
 </section>
 
 <!-- overlays -->
@@ -211,399 +79,13 @@ h1{margin:6px 0 2px;font-size:34px;letter-spacing:-1px}
 <div class="ov" id="ovMenu"><div class="sheet" id="menuBody"></div></div>
 <div class="ov center" id="ovChallenge"><div class="modal" id="chBody"></div></div>
 <div class="ov center" id="ovInfo" style="pointer-events:none"><div class="modal infoTxt" id="infoBody"></div></div>
+<div class="ov" id="ovAv"><div class="sheet" id="avBody"></div></div>
+<div class="flash" id="flash"></div>
 <div class="evt" id="evt"></div>
 
-<script>
-'use strict';
-const COLORS = ['red', 'yellow', 'green', 'blue'];
-const CNAME = { red: 'Red', yellow: 'Yellow', green: 'Green', blue: 'Blue' };
-let META = { house: {}, max: 15 };
-let S = null;                 // latest game state from server
-let ws = null, wantOpen = false, retry = 0;
-let session = JSON.parse(localStorage.getItem('uno.session') || 'null');
-let selIds = [];             // selected card ids in hand (more than one = combo)
-let lastHold = 0, recvAt = 0, lastSeq;   // press-and-hold timestamp, state arrival time, last event shown
-let pick = null;              // {card,color,target}
-let prevTurn = null;
+<script src="scenes.js"></script>
+<script src="fx.js"></script>
+<script src="app.js"></script>
 
-const $ = (id) => document.getElementById(id);
-function h(tag, attrs, ...kids) {
-  const e = document.createElement(tag);
-  for (const k in (attrs || {})) {
-    if (attrs[k] == null || attrs[k] === false) continue;
-    if (k === 'class') e.className = attrs[k];
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]);
-    else if (k === 'style') e.style.cssText = attrs[k];
-    else e.setAttribute(k, attrs[k]);
-  }
-  for (const c of kids.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(c));
-  return e;
-}
-const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((c) => c != null && c !== false).map((c) => (c.nodeType ? c : document.createTextNode(String(c)))));
-function toast(msg, ms = 2200) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), ms); }
-function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
-const overlay = (id, on) => $(id).classList.toggle('on', on);
-
-// ---------- network ----------
-function connect(then) {
-  wantOpen = true;
-  if (ws && (ws.readyState === 0 || ws.readyState === 1)) { if (ws.readyState === 1 && then) then(); else if (then) ws.addEventListener('open', then, { once: true }); return; }
-  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-  ws.onopen = () => {
-    retry = 0; $('recon').classList.remove('on');
-    if (session) tx({ t: 'join', code: session.code, pid: session.pid, token: session.token, name: myName() });
-    if (then) then();
-  };
-  ws.onmessage = (ev) => onMsg(JSON.parse(ev.data));
-  ws.onclose = () => {
-    if (!wantOpen) return;
-    $('recon').classList.add('on');
-    setTimeout(() => connect(), Math.min(1000 * 2 ** retry++, 6000));
-  };
-}
-const tx = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
-setInterval(() => tx({ t: 'ping' }), 25000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && wantOpen && (!ws || ws.readyState > 1)) connect(); });
-
-function onMsg(m) {
-  if (m.t === 'joined') {
-    session = { code: m.code, pid: m.pid, token: m.token };
-    localStorage.setItem('uno.session', JSON.stringify(session));
-    history.replaceState(null, '', '?room=' + m.code); lastSeq = undefined;
-  } else if (m.t === 'state') { S = m; recvAt = performance.now(); render(); keepAwake(); }
-  else if (m.t === 'error') {
-    toast(m.msg);
-    if (m.code === 'noroom') { session = null; localStorage.removeItem('uno.session'); S = null; show('home'); }
-  } else if (m.t === 'kicked' || m.t === 'left') { leaveLocal(); if (m.t === 'kicked') toast('You were removed from the room.'); }
-}
-function leaveLocal() { session = null; S = null; selIds = []; lastSeq = undefined; localStorage.removeItem('uno.session'); history.replaceState(null, '', location.pathname); overlay('ovEnd', false); overlay('ovMenu', false); show('home'); }
-
-// ---------- cards ----------
-function sym(c) {
-  switch (c.type) { case 'num': return String(c.value); case 'skip': return '⊘'; case 'reverse': return '⇄'; case 'draw2': return '+2'; case 'wild': return 'W'; case 'wild4': return '+4'; case 'house': return (META.house[c.house] || {}).icon || '★'; }
-}
-function cardEl(c, o = {}) {
-  const cls = ['card', c.type === 'house' ? 'house' : c.type.startsWith('wild') ? 'wild' : c.color];
-  if (o.dim) cls.push('dim'); if (o.sel) cls.push('sel'); if (o.drawn) cls.push('drawn');
-  const s = sym(c), small = c.type === 'house' || c.type === 'wild' ? '' : s;
-  const e = h('div', { class: cls.join(' '), 'data-id': c.id },
-    small && h('span', { class: 'c a' }, small), h('span', { class: 'm' }, s), small && h('span', { class: 'c b' }, small),
-    c.type === 'house' && h('span', { class: 'nm' }, (META.house[c.house] || {}).name || ''));
-  if (o.dot) e.append(h('i', { class: 'dot', style: `background:var(--${o.dot})` }));
-  if (o.info !== false) bindHold(e, c);
-  return e;
-}
-const backEl = () => h('div', { class: 'card back' });
-function cardName(c) {
-  if (c.type === 'house') return (META.house[c.house] || {}).name;
-  const col = c.color ? CNAME[c.color] + ' ' : '';
-  return c.type === 'num' ? col + c.value : { skip: col + 'Skip', reverse: col + 'Reverse', draw2: col + '+2', wild: 'Wild', wild4: 'Wild +4' }[c.type];
-}
-function cardDesc(c) {
-  if (c.type === 'house') return META.house[c.house].desc;
-  return { num: 'Match the color or the number.', skip: 'Next player loses their turn.', reverse: 'Turn order flips (acts as Skip with 2 players).', draw2: 'Next player draws 2 and loses their turn.', wild: 'Play any time and choose the color.', wild4: S && S.settings.challenges ? 'You choose the color. Next player draws 4 and loses their turn, unless they challenge: if you held a card of the color in play you draw 4 instead, if you were honest they draw 6.' : 'Next player draws 4 and loses their turn. You choose the color.' }[c.type];
-}
-const needsColor = (c) => c.type === 'wild' || c.type === 'wild4' || c.type === 'house';
-const needsTarget = (c) => c.type === 'house' && META.house[c.house].needs === 'target';
-const colorIdx = (c) => (c.color ? COLORS.indexOf(c.color) : 9);
-const ORDER = { num: 0, skip: 1, reverse: 2, draw2: 3, wild: 4, wild4: 5, house: 6 };
-
-// ---------- render ----------
-function render() {
-  if (!S) return;
-  const me = S.players.find((p) => p.id === S.you);
-  if (lastSeq === undefined) lastSeq = S.event ? S.event.seq : 0;
-  else if (S.event && S.event.seq > lastSeq) { lastSeq = S.event.seq; showEvent(S.event); }
-  if (S.phase === 'lobby') { show('lobby'); overlay('ovEnd', false); overlay('ovChallenge', false); renderLobby(); }
-  else { show('table'); renderTable(me); }
-}
-
-function toggleRow(title, desc, on, fn, ro) {
-  return h('div', { class: 'tog' + (ro ? ' ro' : ''), onclick: ro ? null : fn }, h('div', { class: 't' }, h('b', {}, title), h('span', {}, desc)), h('div', { class: 'sw' + (on ? ' on' : '') }));
-}
-
-function renderLobby() {
-  const isHost = S.host === S.you, set = S.settings;
-  $('lcode').textContent = session ? session.code : '';
-  $('pcount').textContent = `(${S.players.length}/${S.max})`;
-  const pl = $('plist'); pl.replaceChildren(...S.players.map((p) => h('div', { class: 'pl' },
-    h('span', { class: 'nm' }, (p.id === S.host ? '👑 ' : p.bot ? '🤖 ' : '') + p.name + (p.id === S.you ? ' (you)' : '')),
-    !p.connected && h('small', {}, 'offline'), p.wins > 0 && h('small', {}, `🏆 ${p.wins}`),
-    isHost && p.id !== S.you && h('button', { onclick: () => tx({ t: 'kick', pid: p.id }) }, 'Remove'))));
-  $('botrow').style.display = isHost ? '' : 'none';
-  const rb = $('rulebody'), ro = !isHost;
-  const send = (o) => tx({ t: 'settings', ...o });
-  const house = Object.entries(META.house);
-  rb.replaceChildren(
-    toggleRow('Stack +2 / +4', 'Answer a +2 with another +2 (or +4 with +4) and pass the penalty on.', set.stacking, () => send({ stacking: !set.stacking }), ro),
-    toggleRow('Combo play', 'Play two or more cards with the same number together, even in different colors. At least one must match the top card, and you pick which of those colors stays.', set.combos, () => send({ combos: !set.combos }), ro),
-    toggleRow('Challenge rules', 'Wild +4 and Draw 12 may be played any time. The player they hit can challenge a bluff. Draw 12 is only in the deck when this is on.', set.challenges, () => send({ challenges: !set.challenges }), ro),
-    h('div', { class: 'tog' + (ro ? ' ro' : ''), style: 'flex-wrap:wrap' }, h('div', { class: 't' }, h('b', {}, 'Turn timer'), h('span', {}, 'Out of time means draw and pass.')),
-      h('div', { class: 'seg' }, [0, 15, 30, 45, 60].map((v) => h('button', { class: set.timer === v ? 'on' : '', onclick: () => !ro && send({ timer: v }) }, v ? v + 's' : 'Off')))),
-    toggleRow('Allow joining mid-game', 'Friends can hop into a round that is already running.', set.lateJoin, () => send({ lateJoin: !set.lateJoin }), ro),
-    h('div', { class: 'tog' + (ro ? ' ro' : '') }, h('div', { class: 't' }, h('b', {}, 'Starting hand'), h('span', {}, 'Cards each player gets.')),
-      h('div', { class: 'step' }, h('button', { onclick: () => !ro && send({ handSize: Math.max(3, set.handSize - 1) }) }, '−'), h('b', {}, set.handSize), h('button', { onclick: () => !ro && send({ handSize: Math.min(10, set.handSize + 1) }) }, '+'))),
-    h('div', { class: 'lbl', style: 'margin-top:14px' }, `House cards in the deck (${set.houseCards.length}/${house.length}) · 2 copies each (Draw 12: 1)`),
-    ...house.map(([k, v]) => toggleRow(`${v.icon} ${v.name}`, v.desc, set.houseCards.includes(k), () => send({ houseCards: set.houseCards.includes(k) ? set.houseCards.filter((x) => x !== k) : [...set.houseCards, k] }), ro)));
-  const st = $('btnStart'); st.style.display = isHost ? '' : 'none'; st.disabled = S.players.length < 2;
-  st.textContent = S.players.length < 2 ? 'Waiting for another player…' : 'Start game';
-  const hostP = S.players.find((p) => p.id === S.host);
-  const w = $('waitHost'); w.replaceChildren();
-  if (!isHost) { w.append(hostP && hostP.connected ? 'Waiting for the host to start…' : h('button', { onclick: () => tx({ t: 'claimhost' }) }, 'Host is away. Become host')); }
-}
-
-function renderTable(me) {
-  $('tcode').textContent = session ? session.code : '';
-  const myTurn = S.turn === S.you && S.phase === 'playing';
-  const meIdx = S.players.findIndex((p) => p.id === S.you);
-  const L = S.players.length;
-  // opponents in turn order, starting with the player after me
-  const opp = []; for (let i = 1; i < L; i++) opp.push(S.players[(meIdx + i * S.dir + L * 20) % L]);
-  $('opps').replaceChildren(...opp.map((p) => h('div', { class: 'opp' + (p.id === S.turn ? ' cur' : '') + (p.connected || p.bot ? '' : ' off') },
-    p.count === 1 && h('span', { class: 'tag' }, 'UNO'), h('b', {}, (p.bot ? '🤖 ' : '') + p.name), h('div', { class: 'n' }, p.count), h('div', { style: 'color:#bcd' }, p.wins ? `🏆 ${p.wins}` : ' '))));
-
-  // centre: draw pile + top card
-  const draw = h('div', { class: 'pile', onclick: () => doDraw() }, backEl(), h('div', { class: 'cnt' }, `${S.drawCount} to draw`));
-  if (S.canDraw) draw.firstChild.style.boxShadow = '0 0 0 3px var(--accent),0 0 18px var(--accent)';
-  const top = h('div', { class: 'topwrap' }, h('div', { class: 'ring', style: `--c:var(--${S.color})` }), cardEl(S.top, { dot: S.top.color ? null : S.color }), h('div', { class: 'cnt', style: 'font-size:12px;color:#cde;margin-top:4px' }, `Color: ${CNAME[S.color]}`));
-  if (S.pending) top.append(h('div', { class: 'pend' }, '+' + S.pending));
-  $('mid').replaceChildren(h('div', { class: 'dirmark' }, S.dir === 1 ? '↻' : '↺'), draw, top);
-
-  // played history: shown cards, newest on the right
-  const pl = $('played'), atEnd = pl.scrollWidth - pl.scrollLeft - pl.clientWidth < 40;
-  pl.replaceChildren(...S.played.map((e) => h('div', { class: 'pc' }, cardEl(e.card, { dot: e.card.color ? null : e.color }), h('span', {}, e.by || 'start'))));
-  if (atEnd) pl.scrollLeft = pl.scrollWidth;
-
-  // banner + log
-  const cur = S.players.find((p) => p.id === S.turn);
-  const bn = $('banner'); bn.className = 'banner' + (myTurn ? ' me' : '');
-  const ch = S.challenge, chT = ch && S.players.find((p) => p.id === ch.target);
-  if (ch && ch.target === S.you) bn.className = 'banner me';
-  bn.dataset.base = S.phase !== 'playing' ? '' : ch ? (ch.target === S.you ? 'Your call: accept or challenge?' : `${chT ? chT.name : ''} must accept or challenge…`) : myTurn ? (S.drawnId ? 'Play the drawn card or pass' : S.pending ? `Stack a draw card or take +${S.pending}` : 'Your turn') : `${cur ? cur.name : ''}'s turn${cur && !cur.connected && !cur.bot ? ' (offline)' : ''}`;
-  tickTimer();
-  $('logl').replaceChildren(...S.log.slice(-2).map((t) => h('div', {}, t)));
-  if (myTurn && prevTurn !== S.you && navigator.vibrate) navigator.vibrate(120);
-  prevTurn = S.turn;
-
-  // hand
-  const hand = $('hand'), sx = hand.scrollLeft;
-  const sorted = [...S.hand].sort((a, b) => colorIdx(a) - colorIdx(b) || ORDER[a.type] - ORDER[b.type] || (a.value || 0) - (b.value || 0));
-  selIds = selIds.filter((id) => S.hand.some((c) => c.id === id));
-  if (!myTurn || S.challenge) selIds = [];
-  const sc = selCards(), one = sc.length === 1 && sc[0].type === 'num' ? sc[0] : null;
-  const mates = (c) => !!one && c.id !== one.id && c.type === 'num' && c.value === one.value && S.settings.combos && !S.drawnId && !S.pending;
-  hand.replaceChildren(...sorted.map((c) => {
-    const e = cardEl(c, { dim: myTurn && !S.challenge && !usable(c), sel: selIds.includes(c.id), drawn: S.drawnId === c.id });
-    if (mates(c)) e.classList.add('combo');
-    e.addEventListener('click', () => onCard(c, e));
-    return e;
-  }));
-  hand.style.setProperty('--ov', S.hand.length <= 6 ? '-.06' : S.hand.length <= 10 ? '-.22' : '-.4');
-  hand.scrollLeft = sx;
-
-  // action bar
-  const acts = $('acts'); acts.replaceChildren();
-  const hasMates = one && S.hand.some(mates);
-  acts.append(h('div', { class: 'info' }, sc.length > 1 ? h('span', {}, h('b', {}, `Combo × ${sc.length}`), ' — tap more ' + sc[0].value + 's to add, tap one to remove.') : sc.length === 1 ? h('span', {}, h('b', {}, cardName(sc[0])), ' — ', cardDesc(sc[0]), hasMates ? ` Tap another ${one.value} to make a combo.` : '') : `You hold ${S.hand.length} card${S.hand.length === 1 ? '' : 's'}.`));
-  if (S.unoWindow && S.unoWindow !== S.you) { const v = S.players.find((p) => p.id === S.unoWindow); acts.append(h('button', { class: 'catch', onclick: () => tx({ t: 'catch' }) }, `Catch ${v.name}!`)); }
-  if (S.hand.length <= 2 && me && !me.called) acts.append(h('button', { class: 'uno', onclick: () => tx({ t: 'uno' }) }, 'UNO!'));
-  else if (me && me.called && S.hand.length <= 2) acts.append(h('button', { disabled: '' }, 'UNO ✓'));
-  if (sc.length) acts.append(h('button', { class: 'primary', onclick: startPlay }, sc.length > 1 ? `Play ${sc.length}` : 'Play'));
-  if (S.canPass) acts.append(h('button', { onclick: () => tx({ t: 'pass' }) }, 'Pass'));
-  else if (S.canDraw && !sc.length) acts.append(h('button', { onclick: doDraw }, S.pending ? `Draw ${S.pending}` : 'Draw'));
-
-  renderChallenge();
-  renderEnd();
-}
-
-function doDraw() { if (S && S.canDraw) tx({ t: 'draw' }); else if (S && S.phase === 'playing') toast(S.turn === S.you ? 'Play or pass first.' : 'Not your turn.'); }
-
-// ---------- selection / combos ----------
-const selCards = () => selIds.map((id) => S.hand.find((c) => c.id === id)).filter(Boolean);
-const comboOK = () => S.settings.combos && !S.drawnId && !S.pending;
-// a number card that cannot be played alone can still ride along with a playable card of the same number
-const comboable = (c) => comboOK() && c.type === 'num' && S.hand.some((x) => x.type === 'num' && x.value === c.value && S.playable.includes(x.id));
-const usable = (c) => S.playable.includes(c.id) || comboable(c);
-const freshSel = (c) => (S.playable.includes(c.id) ? [c.id] : S.hand.filter((x) => x.type === 'num' && x.value === c.value).map((x) => x.id));
-
-function onCard(c, el) {
-  if (Date.now() - lastHold < 450) return;               // that was a press-and-hold, not a tap
-  if (S.challenge) return toast('Waiting for the challenge answer.');
-  if (S.turn !== S.you) return toast('Not your turn yet.');
-  if (!usable(c)) { el.classList.add('shake'); setTimeout(() => el.classList.remove('shake'), 300); return toast(S.pending ? 'Stack a matching draw card, or draw.' : S.drawnId ? 'You can only play the card you drew.' : 'That one does not match.'); }
-  const first = selCards()[0], i = selIds.indexOf(c.id);
-  if (!first) selIds = freshSel(c);
-  else if (i >= 0) { if (selIds.length === 1) return startPlay(); selIds.splice(i, 1); }
-  else if (comboOK() && first.type === 'num' && c.type === 'num' && first.value === c.value) selIds.push(c.id);
-  else selIds = freshSel(c);
-  renderTable(S.players.find((p) => p.id === S.you));
-}
-
-function startPlay() {
-  const cards = selCards(); if (!cards.length) return;
-  if (cards.length === 1) {
-    const c = cards[0];
-    if (!needsColor(c) && !needsTarget(c)) { selIds = []; return tx({ t: 'play', cardId: c.id }); }
-    pick = { card: c, color: null, target: null }; renderPick(); return overlay('ovPick', true);
-  }
-  if (!cards.some((c) => S.playable.includes(c.id))) return toast('Include a card that matches the top card.');
-  const colors = [...new Set(cards.map((c) => c.color))];
-  if (colors.length === 1) { selIds = []; return tx({ t: 'playmany', cardIds: cards.map((c) => c.id), color: colors[0] }); }
-  pick = { combo: cards, colors, color: null }; renderPick(); overlay('ovPick', true);
-}
-function renderPick() {
-  const body = $('pickBody');
-  if (pick.combo) {
-    fill(body, h('h3', {}, `Combo × ${pick.combo.length}`), h('p', {}, 'Pick the color that stays in play. It has to be one of the colors you are playing.'),
-      h('div', { class: 'cols' }, pick.colors.map((k) => h('button', { class: pick.color === k ? 's' : '', style: `background:var(--${k})`, onclick: () => { pick.color = k; renderPick(); } }))),
-      h('div', { class: 'row' }, h('button', { onclick: () => overlay('ovPick', false) }, 'Cancel'),
-        h('button', { class: 'primary', disabled: pick.color ? null : '', onclick: () => { overlay('ovPick', false); const ids = pick.combo.map((c) => c.id); selIds = []; tx({ t: 'playmany', cardIds: ids, color: pick.color }); } }, 'Play combo')));
-    return;
-  }
-  const { card } = pick, others = S.players.filter((p) => p.id !== S.you);
-  const ready = (!needsColor(card) || pick.color) && (!needsTarget(card) || pick.target);
-  fill(body,
-    h('h3', {}, cardName(card)), h('p', {}, cardDesc(card)),
-    needsColor(card) && h('div', {}, h('div', { class: 'lbl' }, card.house === 'dump' || card.house === 'roulette' ? 'Pick the color (also the new color in play)' : 'Pick the new color'),
-      h('div', { class: 'cols' }, COLORS.map((k) => h('button', { class: pick.color === k ? 's' : '', style: `background:var(--${k})`, onclick: () => { pick.color = k; renderPick(); } })))),
-    needsTarget(card) && h('div', {}, h('div', { class: 'lbl' }, 'Pick a player'),
-      h('div', { class: 'tg' }, others.map((p) => h('button', { class: pick.target === p.id ? 's' : '', onclick: () => { pick.target = p.id; renderPick(); } }, h('span', {}, p.name), h('b', {}, p.count))))),
-    h('div', { class: 'row' }, h('button', { onclick: () => overlay('ovPick', false) }, 'Cancel'),
-      h('button', { class: 'primary', disabled: ready ? null : '', onclick: () => { overlay('ovPick', false); selIds = []; tx({ t: 'play', cardId: card.id, color: pick.color, target: pick.target }); } }, 'Play it')));
-  if (!ready) body.querySelector('.primary').setAttribute('disabled', '');
-  else body.querySelector('.primary').removeAttribute('disabled');
-}
-
-// ---------- challenge prompt, event banners, timer ----------
-function renderChallenge() {
-  const c = S.challenge, mine = !!c && c.target === S.you && S.phase === 'playing';
-  overlay('ovChallenge', mine); if (!mine) return;
-  const by = S.players.find((p) => p.id === c.by), w4 = c.kind === 'wild4';
-  fill($('chBody'),
-    h('div', { class: 'win' }, w4 ? '🎴' : '💥'),
-    h('h2', { style: 'margin:6px 0' }, `${by ? by.name : 'Someone'} played ${w4 ? 'Wild +4' : 'Draw 12'} on you`),
-    h('p', { class: 'sub', style: 'margin:0 0 4px' }, w4 ? 'It is only legal if they had no card of the color that was in play.' : 'It is only legal if they had no other playable card. Wilds and custom cards count.'),
-    h('p', { class: 'sub', style: 'margin:0' }, `${by ? by.name : 'They'} still holds ${by ? by.count : '?'} card${by && by.count === 1 ? '' : 's'}. Decide: ` , h('b', { id: 'chTime' }, '')),
-    h('div', { class: 'chbtns' },
-      h('button', { class: 'danger', onclick: () => tx({ t: 'respond', challenge: true }) }, 'Challenge!', h('small', {}, `Right: they draw ${c.caught}. Wrong: you draw ${c.fail}.`)),
-      h('button', { onclick: () => tx({ t: 'respond', challenge: false }) }, `Accept and draw ${c.amount}`, w4 ? h('small', {}, 'and lose your turn') : null)));
-  tickTimer();
-}
-function showEvent(e) {
-  const nm = (id) => { const p = S.players.find((q) => q.id === id); return p ? p.name : 'Someone'; };
-  const box = $('evt'); let kids = null;
-  if (e.type === 'reverse') kids = [e.dir === 1 ? '↻ REVERSE' : '↺ REVERSE'];
-  else if (e.type === 'skip') kids = [`⊘ ${nm(e.who)} is skipped`];
-  else if (e.type === 'combo') kids = [`COMBO × ${e.n}!`];
-  else if (e.type === 'draw' && e.n >= 4) kids = [`${nm(e.to)} draws ${e.n}!`];
-  else if (e.type === 'busted') kids = ['🚨 BUSTED!', h('div', { style: 'font-size:14px;font-weight:600' }, `${nm(e.by)} was holding`), cardEl(e.card, { info: false }), `${nm(e.by)} draws ${e.n}`];
-  else if (e.type === 'failed') kids = [`Wrong call! ${nm(e.to)} draws ${e.n}`];
-  if (!kids) return;
-  fill(box, kids); box.classList.remove('on'); void box.offsetWidth; box.classList.add('on');
-  if (navigator.vibrate && (e.type === 'busted' || (e.type === 'draw' && e.n >= 12))) navigator.vibrate([80, 60, 80]);
-}
-function tickTimer() {
-  if (!S || S.phase !== 'playing') return;
-  const actor = S.players.find((p) => p.id === (S.challenge ? S.challenge.target : S.turn));
-  const left = S.ms && actor && !actor.bot && actor.connected ? Math.max(0, Math.ceil((S.ms - (performance.now() - recvAt)) / 1000)) : 0;
-  const bn = $('banner'); bn.textContent = (bn.dataset.base || '') + (left ? ` · ${left}s` : '');
-  const t = $('chTime'); if (t) t.textContent = left ? `${left}s` : '';
-}
-setInterval(tickTimer, 250);
-
-// ---------- press and hold a card to see what it does ----------
-let holdT = null, holdXY = null, infoShown = false;
-function bindHold(el, c) {
-  el.addEventListener('contextmenu', (e) => e.preventDefault());
-  el.addEventListener('pointerdown', (e) => { holdXY = [e.clientX, e.clientY]; clearTimeout(holdT); holdT = setTimeout(() => showInfo(c), 380); });
-  el.addEventListener('pointermove', (e) => { if (holdXY && Math.hypot(e.clientX - holdXY[0], e.clientY - holdXY[1]) > 10) clearTimeout(holdT); });
-}
-function showInfo(c) {
-  const big = cardEl(c, { info: false }); big.style.setProperty('--cw', '150px');
-  fill($('infoBody'), h('div', { style: 'display:flex;justify-content:center' }, big), h('h3', {}, cardName(c)), h('p', {}, cardDesc(c)),
-    c.type === 'num' && S && S.settings.combos ? h('p', { style: 'margin-top:6px' }, 'Combo: play several cards with this number together.') : null);
-  infoShown = true; overlay('ovInfo', true);
-}
-function endHold() { clearTimeout(holdT); holdXY = null; if (infoShown) { infoShown = false; lastHold = Date.now(); overlay('ovInfo', false); } }
-for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, endHold);
-
-// ---------- keep the screen on while playing ----------
-let wake = null;
-async function keepAwake() { try { if ('wakeLock' in navigator && !wake && !document.hidden) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { /* not supported or refused */ } }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && session) keepAwake(); });
-
-function renderEnd() {
-  const on = S.phase === 'ended';
-  overlay('ovEnd', on); if (!on) return;
-  const w = S.players.find((p) => p.id === S.winner), isHost = S.host === S.you;
-  const board = [...S.players].sort((a, b) => b.wins - a.wins);
-  fill($('endBody'),
-    h('div', { class: 'win' }, w && w.id === S.you ? '🎉' : '🏁'),
-    h('h2', { style: 'margin:6px 0' }, w ? (w.id === S.you ? 'You win!' : `${w.name} wins!`) : 'Round over'),
-    h('div', { class: 'plist', style: 'margin:14px 0;text-align:left' }, board.map((p) => h('div', { class: 'pl' }, h('span', { class: 'nm' }, p.name + (p.id === S.you ? ' (you)' : '')), h('small', {}, `${p.count} left`), h('b', {}, `🏆 ${p.wins}`)))),
-    isHost ? h('div', {}, h('button', { class: 'primary', style: 'width:100%;margin-bottom:8px', onclick: () => tx({ t: 'start' }) }, 'Next round'), h('button', { style: 'width:100%', onclick: () => tx({ t: 'lobby' }) }, 'Back to lobby / change rules')) : h('p', { class: 'sub' }, 'Waiting for the host…'));
-}
-
-// ---------- menus ----------
-function showRules() {
-  const house = S ? S.settings.houseCards : Object.keys(META.house);
-  fill($('rulesBody'),
-    h('h3', {}, 'How to play'),
-    ...[['Match', 'Play a card that matches the top card by color, number or symbol. Wild cards go on anything.'],
-      ['Draw', 'No play? Tap the draw pile. If the card you drew fits, you may play it or pass.'],
-      ['Skip / Reverse / +2', 'Skip: next player loses a turn. Reverse: flips direction. +2: next player draws 2 and loses a turn.'],
-      ['Wild / Wild +4', 'Pick the color. +4 makes the next player draw 4 and lose a turn.'],
-      ['UNO!', 'Down to one card? Hit UNO before your turn ends. If someone catches you first, you draw 2.'],
-      ['Winning', 'First player to empty their hand wins the round.']].map(([a, b]) => h('div', { class: 'rule' }, h('b', {}, a), b)),
-    S && S.settings.stacking && h('div', { class: 'rule' }, h('b', {}, 'Stacking is ON'), 'You can answer +2 with +2 and +4 with +4.'),
-    S && S.settings.combos && h('div', { class: 'rule' }, h('b', {}, 'Combo play'), 'Play 2 or more number cards with the same number at once, in any colors. At least one must match the top card, and you choose which of those colors stays in play.'),
-    S && S.settings.challenges && h('div', { class: 'rule' }, h('b', {}, 'Challenges'), 'Wild +4 and Draw 12 can be played any time, but it is on your conscience. The player hit may challenge. Caught: you draw the penalty instead (+4 or 16). Wrong call: they draw 6 for +4, or 16 for Draw 12.'),
-    S && S.settings.timer > 0 && h('div', { class: 'rule' }, h('b', {}, `${S.settings.timer}s turn timer`), 'Out of time means you draw a card and pass.'),
-    h('h3', { style: 'margin-top:16px' }, 'House cards in this game'),
-    house.length ? house.map((k) => h('div', { class: 'rule' }, h('b', {}, `${META.house[k].icon} ${META.house[k].name}`), META.house[k].desc)) : h('p', {}, 'None enabled.'),
-    h('button', { style: 'width:100%;margin-top:14px', onclick: () => overlay('ovRules', false) }, 'Close'));
-  overlay('ovRules', true);
-}
-function showMenu() {
-  const isHost = S && S.host === S.you;
-  fill($('menuBody'),
-    h('h3', {}, 'Menu'),
-    h('button', { style: 'width:100%;margin-bottom:8px', onclick: () => { overlay('ovMenu', false); share(); } }, '📤 Invite friends'),
-    isHost && S.phase === 'playing' && h('button', { style: 'width:100%;margin-bottom:8px', onclick: () => { overlay('ovMenu', false); tx({ t: 'lobby' }); } }, 'End round, back to lobby'),
-    h('button', { class: 'danger', style: 'width:100%;margin-bottom:8px', onclick: () => { overlay('ovMenu', false); tx({ t: 'leave' }); } }, 'Leave game'),
-    h('button', { style: 'width:100%', onclick: () => overlay('ovMenu', false) }, 'Close'));
-  overlay('ovMenu', true);
-}
-async function share() {
-  if (!session) return;
-  const url = `${location.origin}/?room=${session.code}`;
-  const text = `Join my UNO game! Code: ${session.code}`;
-  try { if (navigator.share) return await navigator.share({ title: 'UNO Party', text, url }); } catch (e) { return; }
-  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast('Invite link copied'); } catch { toast(url, 5000); }
-}
-
-// ---------- wiring ----------
-const myName = () => ($('name').value.trim() || localStorage.getItem('uno.name') || 'Player');
-function needName() { const n = $('name').value.trim(); if (!n) { $('name').focus(); toast('Type your name first.'); return null; } localStorage.setItem('uno.name', n); return n; }
-$('btnCreate').onclick = () => { const n = needName(); if (n) connect(() => tx({ t: 'create', name: n })); };
-$('btnJoin').onclick = () => { const n = needName(); const c = $('code').value.trim().toUpperCase(); if (!n) return; if (c.length !== 4) return toast('Enter the 4-letter code.'); session = null; connect(() => tx({ t: 'join', code: c, name: n })); };
-$('btnShare').onclick = share;
-$('btnLeave').onclick = () => tx({ t: 'leave' });
-$('btnBot').onclick = () => tx({ t: 'bot' });
-$('btnStart').onclick = () => tx({ t: 'start' });
-$('btnRules').onclick = showRules;
-$('btnMenu').onclick = showMenu;
-for (const id of ['ovPick', 'ovRules', 'ovMenu']) $(id).addEventListener('click', (e) => { if (e.target.id === id) overlay(id, false); });
-
-(async function init() {
-  try { META = await (await fetch('/meta')).json(); } catch {}
-  $('maxp').textContent = META.max;
-  $('name').value = localStorage.getItem('uno.name') || '';
-  const q = new URLSearchParams(location.search).get('room');
-  if (q) $('code').value = q.toUpperCase().slice(0, 4);
-  if (session && (!q || q.toUpperCase() === session.code)) connect();   // resume after refresh / phone sleep
-  else if (q) { session = null; localStorage.removeItem('uno.session'); }
-})();
-</script>
 </body>
 </html>

@@ -207,4 +207,20 @@ t('UNO catch window still works when the last-but-one card is a Draw 12', () => 
   assert.equal(g.players[0].hand.length, 3);
 });
 
-console.log(`\n${n} rule tests passed`);
+
+// ---------- avatars and rooms ----------
+{
+  const { cleanAvatar, AVATAR_PNG, ROOMS } = require('../server/game');
+  t('avatars: only listed emoji / PNG names are accepted', () => {
+    assert.equal(cleanAvatar('e:🦊'), 'e:🦊'); assert.equal(cleanAvatar('p:fox'), 'p:fox');
+    for (const bad of ['p:../../etc/passwd', 'e:<script>', 'x:fox', 'p:', '', null, 42, 'p:fox.png', 'e:🦊🦊']) assert.equal(cleanAvatar(bad), null, String(bad));
+    const g = new Game(); const a = g.addPlayer('A', { avatar: 'javascript:alert(1)' });
+    assert.ok(AVATAR_PNG.includes(a.avatar.slice(2)), 'invalid avatar falls back to a real one');
+    assert.equal(g.addPlayer('Bot', { bot: true }).avatar, 'p:robot');
+    g.setAvatar(a.id, 'e:🐙'); assert.equal(g.byId(a.id).avatar, 'e:🐙');
+    throws(() => g.setAvatar(a.id, 'p:nope'), /not available/);
+    assert.equal(g.view(a.id).players[0].avatar, 'e:🐙');
+  });
+  t('rooms: six backdrops, living room is the default', () => { assert.equal(ROOMS.length, 6); assert.equal(new Game().settings.room, 'living'); });
+  console.log(`\n${n} rule tests passed`);
+}
