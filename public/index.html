@@ -42,6 +42,8 @@
 <section class="screen" id="lobby"><div class="pad">
   <div class="lbl" style="text-align:center">Room code</div>
   <div class="code" id="lcode">----</div>
+  <div class="qr" id="qrBox" aria-label="QR code to join"></div>
+  <div class="sub" style="text-align:center;margin:0 0 8px;font-size:13px">Scan to join, or share the code</div>
   <div class="row" style="margin:6px 0 14px"><button id="btnShare">📤 Invite friends</button><button id="btnLeave">Leave</button></div>
   <div class="card-box"><div class="lbl">Players <span id="pcount"></span></div><div class="plist" id="plist"></div>
     <div class="row" style="margin-top:10px" id="botrow"><button id="btnBot">🤖 Add bot</button></div></div>
@@ -52,7 +54,7 @@
 
 <!-- TABLE -->
 <section class="screen" id="table">
-  <div class="top"><div class="chip" id="tcode"></div><div class="sp"></div><button id="btnLog" aria-label="Game log">📜 Log</button><button id="btnRules">? Rules</button><button id="btnMenu">⋯</button></div>
+  <div class="top"><div class="chip" id="tcode"></div><div class="sp"></div><button id="btnReact" aria-label="Reactions">😀</button><button id="btnLog" aria-label="Game log">📜</button><button id="btnRules">? Rules</button><button id="btnMenu">⋯</button></div>
   <div class="stage" id="stage">
     <div class="tbl" id="tbl"></div>
     <div class="ctr" id="ctr">
@@ -63,7 +65,9 @@
     <div id="seats"></div>
     <div id="fxl"></div>
   </div>
+  <div class="reacts" id="reacts"></div>
   <div class="dock">
+    <div class="spy" id="spy"></div>
     <div class="hist" id="hist"><div class="hl" id="histTog"></div><div class="played" id="played"></div></div>
     <div class="banner" id="banner"></div>
     <div class="logl" id="logl"></div>
@@ -85,6 +89,7 @@
 <div class="flash" id="flash"></div>
 <div class="evt" id="evt"></div>
 
+<script src="qr.js"></script>
 <script src="scenes.js"></script>
 <script src="fx.js"></script>
 <script src="app.js"></script>

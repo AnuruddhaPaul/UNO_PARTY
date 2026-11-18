@@ -20,6 +20,8 @@ const HOUSE_CARDS = {
   groupdraw:  { name: 'Group Draw',     icon: '🌧️', needs: null,     desc: 'Every other player draws 1 card.' },
   dump:       { name: 'Color Dump',     icon: '🗑️', needs: null,     desc: 'Discard every card of the color you pick from your own hand.' },
   encore:     { name: 'Encore',         icon: '🔁', needs: null,     desc: 'Play again: you take another turn right away.' },
+  spy:        { name: 'Spy',           icon: '👁️', needs: 'target', desc: 'Secretly look at a player\'s whole hand until your next turn. Everyone is told you peeked.' },
+  colorlock:  { name: 'Color Lock',    icon: '🔒', needs: null,     desc: 'Choose a color. Nobody can change the color, wilds included, until your next turn.' },
   draw12:     { name: 'Draw 12',        icon: '💥', needs: 'target', copies: 1, requires: 'challenges',
                 desc: 'A player you choose draws 12. You may play it any time, but if you had ANY other playable card (wilds count) and they challenge you, you draw 16 instead. Challenge wrongly and you draw 16. Needs challenge rules on.' },
 };
@@ -38,13 +40,14 @@ function cleanAvatar(a) {
 const randomAvatar = () => 'p:' + AVATAR_PNG[Math.floor(Math.random() * AVATAR_PNG.length)];
 
 // How long each kind of event stays on screen (ms). Used by the phones and by the server's pacing.
-const EVENT_MS = { swap: 5600, rotate: 6000, shuffle: 7800, steal: 3200, busted: 3000, failed: 2600, skip: 1800, reverse: 1800, combo: 1600, bigdraw: 2400, win: 0 };
+const EVENT_MS = { swap: 5600, rotate: 6000, shuffle: 7800, steal: 3200, spy: 2600, lock: 2200, busted: 3000, failed: 2600, skip: 1800, reverse: 1800, combo: 1600, bigdraw: 2400, win: 0 };
 const DEAL = { shuffleMs: 1900, flipMs: 1100, flightMs: 700 };
 
 const DEFAULT_SETTINGS = () => ({
   room: 'living',                  // backdrop behind the table, chosen by the host
   stacking: false,                 // +2 on +2, +4 on +4
   combos: true,                    // play several same-number cards at once
+  match: 0,                        // 0 = single rounds, otherwise first to this many round wins takes the match
   drawUntil: true,                 // with nothing playable, keep drawing until you get a card that fits
   challenges: true,                // Wild +4 and Draw 12 can be challenged
   timer: 30,                       // seconds per turn, 0 = off
@@ -105,6 +108,7 @@ class Game {
     this.deadline = 0;          // set by the server: ms epoch when the current decision times out
     this.seq = 0; this.event = null; this.events = [];   // events: recent happenings the phones animate, in order
     this.round = 0; this.deal = null; this.busyUntil = 0;
+    this.stats = {}; this.awards = []; this.matchWinner = null; this.lock = null; this.spy = null;
     this.log = [];
     this.nextPid = 1;
   }
@@ -118,6 +122,7 @@ class Game {
     this.events.push(this.event); if (this.events.length > 12) this.events.shift();
   }
   byId(id) { return this.players.find((p) => p.id === id); }
+  stat(id) { return this.stats[id] || (this.stats[id] = { drew: 0, played: 0, combos: 0, caught: 0, bluffs: 0, wrong: 0 }); }
   get current() { return this.players[this.turn]; }
   idx(id) { return this.players.findIndex((p) => p.id === id); }
   step(from, n) { const L = this.players.length; return (((from + this.dir * n) % L) + L) % L; }
@@ -156,6 +161,8 @@ class Game {
     if (this.phase === 'playing') {
       this.say(`${p.name} left.`);
       if (this.unoWindow === id) this.unoWindow = null;
+      if (this.lock && this.lock.by === id) this.lock = null;
+      if (this.spy && (this.spy.by === id || this.spy.target === id)) this.spy = null;
       const ch = this.challenge;
       const targetLeft = !!ch && ch.target === id && ch.by !== id;
       if (ch && (ch.by === id || ch.target === id)) { this.challenge = null; this.turnNo++; }
@@ -176,6 +183,8 @@ class Game {
     this.discard = []; this.played = []; this.log = [];
     this.dir = 1; this.pending = 0; this.pendingType = null; this.drawnId = null;
     this.unoWindow = null; this.winnerId = null; this.challenge = null; this.turnNo = 0;
+    this.lock = null; this.spy = null; this.awards = [];
+    if (this.matchWinner) { for (const p of this.players) p.wins = 0; this.matchWinner = null; }   // a finished match starts fresh
     for (const p of this.players) { p.hand = []; p.called = false; }
     for (const p of this.players) this.drawInto(p, this.settings.handSize);
     // first card must be a plain number card
@@ -191,12 +200,12 @@ class Game {
     const cards = this.players.length * this.settings.handSize;
     const stagger = Math.max(70, Math.min(240, Math.round(9000 / cards)));
     const total = DEAL.shuffleMs + cards * stagger + DEAL.flightMs + DEAL.flipMs;
-    this.round++;
+    this.round++; this.stats = {};   // the deal itself does not count as drawing
     this.deal = { round: this.round, stagger, shuffleMs: DEAL.shuffleMs, flipMs: DEAL.flipMs, flightMs: DEAL.flightMs, total, until: 0 };
     this.busyUntil = 0;     // the server sets the real clock (it may scale time for tests)
   }
 
-  backToLobby() { this.phase = 'lobby'; this.winnerId = null; this.challenge = null; }
+  backToLobby() { this.phase = 'lobby'; this.winnerId = null; this.challenge = null; this.lock = null; this.spy = null; }
 
   // ---- drawing ------------------------------------------------------------
   refill() {
@@ -213,6 +222,7 @@ class Game {
       if (!this.drawPile.length) break;
       p.hand.push(this.drawPile.pop()); got++;
     }
+    if (got && this.phase === 'playing') this.stat(p.id).drew += got;
     if (p.hand.length !== 1) p.called = false;
     return got;
   }
@@ -236,7 +246,12 @@ class Game {
   canDraw(p) { return this.phase === 'playing' && !this.challenge && this.current.id === p.id && !this.drawnId; }
   canPass(p) { return this.phase === 'playing' && !this.challenge && this.current.id === p.id && !!this.drawnId; }
 
-  advance(n) { this.turn = this.step(this.turn, n); this.drawnId = null; this.turnNo++; }
+  advance(n) {
+    this.turn = this.step(this.turn, n); this.drawnId = null; this.turnNo++;
+    const me = this.current.id;
+    if (this.lock) { if (me === this.lock.by) { this.lock = null; this.say('The color lock ended.'); } else this.color = this.lock.color; }
+    if (this.spy && me === this.spy.by) this.spy = null;   // the peek lasts until the spy's next turn
+  }
 
   // ---- actions ------------------------------------------------------------
   play(pid, cardId, opts = {}) {
@@ -272,11 +287,13 @@ class Game {
     p.hand.splice(p.hand.indexOf(card), 1);
     this.discard.push(card);
     this.color = colorless ? opts.color : card.color;
+    if (this.lock && this.lock.by !== p.id) this.color = this.lock.color;   // the color cannot change while locked
+    this.stat(p.id).played++;
     this.played.push({ card, by: p.name, color: this.color });
     if (this.played.length > 30) this.played.shift();
     this.drawnId = null;
 
-    this.say(`${p.name} played ${nameOf(card)}${colorless ? ' → ' + this.color : ''}${target ? ' on ' + target.name : ''}.`);
+    this.say(`${p.name} played ${nameOf(card)}${colorless ? ' → ' + (this.lock && this.lock.by !== p.id ? this.color + ' (locked, the color stays)' : this.color) : ''}${target ? ' on ' + target.name : ''}.`);
 
     if (p.hand.length === 0) return this.win(p);
 
@@ -313,7 +330,8 @@ class Game {
       this.played.push({ card: c, by: p.name, color: c.color });
     }
     while (this.played.length > 30) this.played.shift();
-    this.color = color;
+    this.color = this.lock && this.lock.by !== p.id ? this.lock.color : color;
+    this.stat(p.id).played += ordered.length; this.stat(p.id).combos++;
     this.say(`${p.name} played a combo of ${ordered.length} × ${ordered[0].value} → ${color}.`);
     this.emit('combo', { by: p.id, n: ordered.length });
     if (p.hand.length === 0) return this.win(p);
@@ -381,12 +399,12 @@ class Game {
       return this.advance(2);
     }
     if (c.hadAlt) { // caught
-      this.drawInto(off, c.caught);
+      this.drawInto(off, c.caught); this.stat(tgt.id).bluffs++;
       this.say(`${tgt.name} caught ${off.name}! They held ${nameOf(c.proof)}. ${off.name} draws ${c.caught}.`);
       this.emit('busted', { by: off.id, caller: tgt.id, card: c.proof, n: c.caught });
       return this.advance(1);
     }
-    this.drawInto(tgt, c.fail); // wrong challenge
+    this.drawInto(tgt, c.fail); this.stat(tgt.id).wrong++; // wrong challenge
     this.say(`${tgt.name} challenged wrongly and draws ${c.fail}.`);
     this.emit('failed', { to: tgt.id, by: off.id, n: c.fail });
     return this.advance(c.kind === 'wild4' ? 2 : 1);
@@ -471,6 +489,18 @@ class Game {
         this.say(`${p.name} plays again.`);
         return this.advance(0);
       }
+      case 'spy': {
+        this.spy = { by: p.id, target: target.id };
+        this.say(`${p.name} is peeking at ${target.name}'s hand.`);
+        this.emit('spy', { by: p.id, target: target.id });
+        return this.advance(1);
+      }
+      case 'colorlock': {
+        this.lock = { by: p.id, color: this.color };
+        this.say(`${p.name} locked the color to ${this.color}. Nobody can change it until ${p.name}'s next turn.`);
+        this.emit('lock', { by: p.id, color: this.color });
+        return this.advance(1);
+      }
       case 'draw12': {
         if (ctx && ctx.challengeable) return this.beginChallenge(p, card, target, ctx.proof);
         this.drawInto(target, 12); this.say(`${target.name} draws 12.`); this.emit('draw', { to: target.id, n: 12 });
@@ -529,14 +559,33 @@ class Game {
     if (this.phase !== 'playing' || !this.unoWindow || this.unoWindow === byId) throw new Error('Nobody to catch.');
     const v = this.byId(this.unoWindow);
     this.unoWindow = null;
-    this.drawInto(v, 2);
+    this.drawInto(v, 2); this.stat(byId).caught++;
     this.say(`${this.byId(byId).name} caught ${v.name} without UNO! ${v.name} draws 2.`);
   }
 
   win(p) {
-    this.phase = 'ended'; this.winnerId = p.id; p.wins++; this.challenge = null;
+    this.phase = 'ended'; this.winnerId = p.id; p.wins++; this.challenge = null; this.lock = null; this.spy = null;
     this.say(`${p.name} wins the round!`);
+    this.awards = this.computeAwards(p);
+    if (this.settings.match && p.wins >= this.settings.match) { this.matchWinner = p.id; this.say(`${p.name} wins the match with ${p.wins} round wins!`); }
     this.emit('win', { by: p.id });
+  }
+
+  // End-of-round awards, from what actually happened this round. Only awarded when somebody really earned it.
+  computeAwards(winner) {
+    const out = [], best = (key, min) => {
+      let top = null;
+      for (const p of this.players) { const v = (this.stats[p.id] || {})[key] || 0; if (v >= min && (!top || v > top.v)) top = { p, v }; }
+      return top;
+    };
+    const mag = best('drew', 4); if (mag) out.push({ icon: '🧲', title: 'Card Magnet', who: mag.p.id, note: `drew ${mag.v} cards` });
+    const kng = best('combos', 1); if (kng) out.push({ icon: '👑', title: 'Combo King', who: kng.p.id, note: `${kng.v} combo${kng.v === 1 ? '' : 's'}` });
+    const bb = best('bluffs', 1); if (bb) out.push({ icon: '🕵️', title: 'Bluff Buster', who: bb.p.id, note: `caught ${bb.v} bluff${bb.v === 1 ? '' : 's'}` });
+    const cop = best('caught', 1); if (cop) out.push({ icon: '🚓', title: 'UNO Cop', who: cop.p.id, note: `caught ${cop.v} missed UNO${cop.v === 1 ? '' : 's'}` });
+    const egg = best('wrong', 1); if (egg) out.push({ icon: '🥚', title: 'Egg on Face', who: egg.p.id, note: 'challenged and was wrong' });
+    let hoard = null; for (const q of this.players) if (q.id !== winner.id && q.hand.length >= 8 && (!hoard || q.hand.length > hoard.hand.length)) hoard = q;
+    if (hoard) out.push({ icon: '🐿️', title: 'Card Hoarder', who: hoard.id, note: `stuck with ${hoard.hand.length} cards` });
+    return out.slice(0, 4);
   }
 
   assertTurn(pid) {
@@ -576,6 +625,10 @@ class Game {
       event: this.event,
       events: this.events.slice(-8),
       round: this.round,
+      lock: this.lock ? { by: this.lock.by, color: this.lock.color } : null,
+      spy: me && this.spy && this.spy.by === pid && this.byId(this.spy.target) ? { target: this.spy.target, name: this.byId(this.spy.target).name, hand: this.byId(this.spy.target).hand } : null,
+      awards: this.phase === 'ended' ? this.awards : [],
+      matchWinner: this.matchWinner,
       deal: this.deal && this.phase === 'playing' ? { ...this.deal, left: Math.max(0, (this.deal.until || 0) - Date.now()) } : null,
       winner: this.winnerId,
       log: this.log.slice(-60),

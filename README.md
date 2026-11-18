@@ -60,3 +60,12 @@ On by default, switch in the lobby. If nothing in your hand fits the top card, D
 - **Draws:** every card drawn flies from the deck to the player, one after another (up to 14 shown).
 - **Hand changes get a big notice** that cannot be missed (red border when it involves you): Swap Hands names both players and the card counts, Hand Rotate shows everyone, Shuffle Hands lists every player's count and confirms everyone keeps the same number of cards, Pickpocket names thief and victim. The cards fly between the seats; for Shuffle they are collected in the middle, riffled, and dealt back out with the same counts. Your own hand is hidden until the new cards arrive.
 - **Game log:** the 📜 Log button (or tap the two lines above your hand) opens the last 60 things that happened.
+
+## Round 3b: reactions, QR, presets, match mode, new cards, awards
+
+- **Reactions:** the 😀 button on the table opens eight quick emoji that float up from your seat on everyone's screen (one per 1.2 s, nothing is stored).
+- **QR join:** the lobby shows a QR code for `/?room=CODE`. The generator is `public/qr.js` (qrcode-generator, MIT), so nothing is fetched at runtime.
+- **Quick setups** (host, lobby): Classic (plain UNO), Party (default), Chaos (everything on, 10 cards, 15 s), Quick (5 cards, short list of cards).
+- **Match mode:** Single round, or first to 2 / 3 / 5 round wins. The winner of the match is announced and the next start begins a fresh match. Changing the target resets the scores.
+- **New house cards:** **Spy** (secretly look at one player's whole hand until your next turn, everyone is told you peeked) and **Color Lock** (nobody can change the color, wilds included, until your next turn).
+- **Round awards:** Card Magnet, Combo King, Bluff Buster, UNO Cop, Egg on Face, Card Hoarder. Computed from what really happened that round; a quiet round awards nothing.

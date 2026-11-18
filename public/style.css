@@ -251,3 +251,28 @@ body.lowfx .rwrap{transition:none}
 .logl{cursor:pointer}
 body.lowfx .big{animation:none!important;opacity:1}
 body.lowfx .big.off{opacity:0}
+
+/* round 3b: reactions, QR, presets, awards, spy */
+.react{position:absolute;transform:translate(-50%,-50%);font-size:40px;z-index:25;pointer-events:none;animation:reactup 2.5s ease-out forwards}
+@keyframes reactup{0%{opacity:0;transform:translate(-50%,-30%) scale(.4)}15%{opacity:1;transform:translate(-50%,-90%) scale(1.25)}100%{opacity:0;transform:translate(-50%,-330%) scale(1)}}
+.reacts{display:none;position:relative;z-index:4;justify-content:center;gap:6px;padding:6px;background:#000c;margin:0 10px;border-radius:14px}
+.reacts.on{display:flex}
+.reacts button{padding:6px 8px;font-size:24px;background:#fff2;border-radius:10px}
+.qr{width:170px;height:170px;margin:0 auto 4px;background:#fff;border-radius:14px;padding:6px}
+.qr svg{width:100%;height:100%;display:block}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.presets button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px}
+.presets small{color:var(--mute);font-size:12px}
+.presets.ro{opacity:.55;pointer-events:none}
+.awards{display:grid;gap:6px;margin:12px 0;text-align:left}
+.aw{display:flex;gap:10px;align-items:center;background:var(--panel2);border-radius:12px;padding:8px 12px}
+.aw .ai{font-size:28px}
+.aw b{display:block}.aw small{color:var(--mute);font-size:13px}
+.matchwin{font-size:14px;letter-spacing:.2em;color:var(--accent);font-weight:900}
+.spy{display:none;margin:0 10px 4px;background:#2a1f55ee;border:2px solid #b99bff;border-radius:12px;padding:6px 8px}
+.spy.on{display:block}
+.spy .sh{display:flex;align-items:center;gap:4px;font-size:12px}
+.spy .sh span{flex:1;color:#cfc3ff}
+.spy .sh button{padding:2px 8px;font-size:12px}
+.spy .sc{display:flex;gap:4px;overflow-x:auto;padding:6px 0 2px}
+.spy .sc .card{--cw:34px}

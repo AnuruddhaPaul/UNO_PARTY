@@ -291,6 +291,56 @@ t('pickpocket emits a steal event', () => {
   assert.equal(g.event.type, 'steal'); assert.equal(g.event.from, g.players[1].id);
 });
 
+// ---------- spy, color lock, match mode, awards ----------
+t('spy: only the spy sees the hand, everyone is told, it ends on the spy\'s next turn', () => {
+  const sp = mk({ type: 'house', house: 'spy' });
+  const g = setup(num('yellow', 1), 0, [[sp, num('red', 3), num('red', 4)], [num('red', 6), num('green', 5)], [num('red', 7), num('blue', 2)]], { houseCards: ['spy'] });
+  const [a, b, c] = g.players.map((p) => p.id);
+  const b6 = g.players[1].hand[0], c7 = g.players[2].hand[0];
+  g.play(a, sp.id, { color: 'red', target: b });
+  assert.equal(g.event.type, 'spy');
+  assert.deepEqual(g.view(a).spy.hand.map((x) => x.id), g.players[1].hand.map((x) => x.id));
+  assert.equal(g.view(b).spy, null); assert.equal(g.view(c).spy, null);
+  g.play(b, b6.id); g.play(c, c7.id);       // turn comes round to a again
+  assert.equal(g.view(a).spy, null, 'peek is over');
+});
+t('color lock: nobody can change the color until the locker plays again', () => {
+  const lk = mk({ type: 'house', house: 'colorlock' }), w = wild();
+  const g = setup(num('yellow', 1), 0, [[lk, num('red', 3), num('red', 4)], [w, num('green', 5)], [num('red', 9), num('blue', 2)]], { houseCards: ['colorlock'] });
+  const [a, b, c] = g.players.map((p) => p.id);
+  g.play(a, lk.id, { color: 'red' });
+  assert.equal(g.color, 'red'); assert.equal(g.lock.by, a);
+  assert.equal(g.view(c).lock.color, 'red');
+  g.play(b, w.id, { color: 'blue' });
+  assert.equal(g.color, 'red', 'the wild could not change the color');
+  assert.ok(g.log.some((l) => /locked, the color stays/.test(l)));
+  g.play(c, g.players[2].hand[0].id);
+  assert.equal(g.lock, null, 'lock ends when it is the locker\'s turn again'); assert.equal(g.turn, 0);
+});
+t('match mode: first to N round wins, then a new match starts from zero', () => {
+  const g = setup(num('yellow', 1), 0, [[num('yellow', 2)], [num('green', 5)]], { match: 2 });
+  g.play(g.players[0].id, g.players[0].hand[0].id);
+  assert.equal(g.players[0].wins, 1); assert.equal(g.matchWinner, null);
+  g.start(); g.players[0].hand = [num(g.color, 2)]; g.turn = 0; g.drawnId = null; g.play(g.players[0].id, g.players[0].hand[0].id);
+  assert.equal(g.matchWinner, g.players[0].id); assert.equal(g.view(g.players[1].id).matchWinner, g.players[0].id);
+  g.start(); assert.equal(g.matchWinner, null); assert.deepEqual(g.players.map((p) => p.wins), [0, 0]);
+});
+t('awards: earned from real stats, nothing invented', () => {
+  const a = num('yellow', 2), b = num('red', 2);
+  const g = setup(num('yellow', 1), 0, [[a, b, num('green', 7)], [num('green', 5), num('green', 6), num('green', 8), num('green', 9), num('green', 4), num('green', 3), num('green', 2), num('green', 1)]], {});
+  g.stats = {};
+  g.drawPile.push(...Array.from({ length: 5 }, () => num('blue', 9)));
+  g.drawInto(g.players[1], 5);
+  g.playMany(g.players[0].id, [a.id, b.id], { color: 'red' });
+  g.players[0].hand = [num('red', 4)]; g.turn = 0;
+  g.play(g.players[0].id, g.players[0].hand[0].id);
+  const names = g.awards.map((x) => x.title);
+  assert.ok(names.includes('Card Magnet') && names.includes('Combo King') && names.includes('Card Hoarder'), names.join());
+  const mag = g.awards.find((x) => x.title === 'Card Magnet'); assert.equal(mag.who, g.players[1].id);
+  const none = setup(num('yellow', 1), 0, [[num('yellow', 2)], [num('green', 5)]]); none.play(none.players[0].id, none.players[0].hand[0].id);
+  assert.deepEqual(none.awards, [], 'a quiet round earns no awards');
+});
+
 // ---------- avatars and rooms ----------
 {
   const { cleanAvatar, AVATAR_PNG, ROOMS } = require('../server/game');

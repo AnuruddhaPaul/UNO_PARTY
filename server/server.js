@@ -7,6 +7,7 @@ const { WebSocketServer } = require('ws');
 const { Game, EVENT_MS, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, MAX_PLAYERS, botMove, apply } = require('./game');
 
 const PORT = process.env.PORT || 3000;
+const REACTIONS = ['👍', '😂', '😮', '😡', '🔥', '😭', '👏', '🤔'];
 const SEC = Number(process.env.SEC_MS) || 1000;           // tests shrink this to run timers fast
 const PACE = SEC / 1000;                                     // scales animation waits the same way as the timers
 const CHALLENGE_SEC = 10;                                    // time the target has to accept / challenge
@@ -20,7 +21,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/health') { res.writeHead(200); return res.end('ok'); }
   if (url.pathname === '/meta') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ house: HOUSE_CARDS, max: MAX_PLAYERS, avatars: { emoji: AVATAR_EMOJI, png: AVATAR_PNG }, rooms: ROOMS }));
+    return res.end(JSON.stringify({ house: HOUSE_CARDS, max: MAX_PLAYERS, avatars: { emoji: AVATAR_EMOJI, png: AVATAR_PNG }, rooms: ROOMS, reactions: REACTIONS }));
   }
   let file = url.pathname === '/' ? '/index.html' : url.pathname;
   file = path.normalize(file).replace(/^(\.\.[/\\])+/, '');
@@ -143,6 +144,7 @@ function handle(ws, msg) {
         if (typeof msg.lateJoin === 'boolean') s.lateJoin = msg.lateJoin;
         if (typeof msg.combos === 'boolean') s.combos = msg.combos;
         if (typeof msg.drawUntil === 'boolean') s.drawUntil = msg.drawUntil;
+        if ([0, 2, 3, 5].includes(msg.match) && msg.match !== s.match) { s.match = msg.match; g.matchWinner = null; for (const q of g.players) q.wins = 0; }   // a new target means a fresh match
         if (typeof msg.challenges === 'boolean') s.challenges = msg.challenges;
         if ([0, 15, 30, 45, 60].includes(msg.timer)) s.timer = msg.timer;
         if (ROOMS.includes(msg.room)) s.room = msg.room;
@@ -157,6 +159,13 @@ function handle(ws, msg) {
         break;
       }
       case 'avatar': g.setAvatar(pid, msg.avatar); break;
+      case 'react': {   // quick emoji over a seat; not stored, just relayed
+        if (!REACTIONS.includes(msg.e)) throw new Error('Unknown reaction.');
+        const now = Date.now(); if (ws.lastReact && now - ws.lastReact < 1200 * PACE) return;   // at most one per 1.2 s each
+        ws.lastReact = now;
+        for (const [, sock] of room.socks) send(sock, { t: 'react', pid, e: msg.e });
+        return;
+      }
       case 'claimhost': {
         const h = g.byId(g.hostId);
         if (h && h.connected) throw new Error('The host is still here.');

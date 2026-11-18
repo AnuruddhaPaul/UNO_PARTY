@@ -8,7 +8,7 @@ let session = JSON.parse(localStorage.getItem('uno.session') || 'null');
 let selIds = [];             // selected card ids in hand (more than one = combo)
 let lastHold = 0, recvAt = 0, lastSeq;   // press-and-hold timestamp, state arrival time, last event shown
 let pick = null;              // {card,color,target}
-let prevTurn = null;
+let prevTurn = null, spyHidden = null;
 let curRects = {}, curPrev = null, flownSeq = 0;   // pre-render hand positions, previous state
 let dealing = null, dealtRound = 0;       // the shuffle-and-deal intro in progress
 
@@ -67,6 +67,7 @@ function onMsg(m) {
     if (dealNew) runDeal(dealNew);
     else { const sp = (m.events || []).filter((e) => (e.seq > (flownSeq || 0)) && ['swap', 'rotate', 'shuffle'].includes(e.type)).pop(); if (m.events && m.events.length) flownSeq = m.events[m.events.length - 1].seq; try { flyDiff(prev, m, rects, sp ? { by: sp.by || sp.a } : null); } catch (e) { /* animations are decoration only */ } }
   }
+  else if (m.t === 'react') { showReaction(m.pid, m.e); }
   else if (m.t === 'error') {
     toast(m.msg);
     if (m.code === 'noroom') { session = null; localStorage.removeItem('uno.session'); S = null; paintScene(false); show('home'); }
@@ -115,6 +116,19 @@ function render() {
   else { show('table'); renderTable(me); }
 }
 
+const ALLH = () => Object.keys(META.house);
+const PRESETS = [
+  { icon: '🎴', name: 'Classic', desc: 'Plain UNO', set: () => ({ stacking: false, combos: false, challenges: false, drawUntil: false, houseCards: [], handSize: 7, timer: 0 }) },
+  { icon: '🎉', name: 'Party', desc: 'The default mix', set: () => ({ stacking: false, combos: true, challenges: true, drawUntil: true, houseCards: ALLH(), handSize: 7, timer: 30 }) },
+  { icon: '🌪️', name: 'Chaos', desc: 'Everything on', set: () => ({ stacking: true, combos: true, challenges: true, drawUntil: true, houseCards: ALLH(), handSize: 10, timer: 15 }) },
+  { icon: '⚡', name: 'Quick', desc: 'Short rounds', set: () => ({ stacking: false, combos: true, challenges: false, drawUntil: true, houseCards: ['sniper', 'groupdraw', 'encore', 'doubleskip', 'colorlock'].filter((k) => META.house[k]), handSize: 5, timer: 15 }) },
+];
+function paintQR() {
+  const box = $('qrBox'); if (!box || !session || typeof qrcode === 'undefined') return;
+  const url = `${location.origin}/?room=${session.code}`;
+  if (box.dataset.url === url) return; box.dataset.url = url;
+  try { const q = qrcode(0, 'M'); q.addData(url); q.make(); box.innerHTML = q.createSvgTag({ cellSize: 5, margin: 3, scalable: true }); } catch (e) { box.textContent = ''; }
+}
 function toggleRow(title, desc, on, fn, ro) {
   return h('div', { class: 'tog' + (ro ? ' ro' : ''), onclick: ro ? null : fn }, h('div', { class: 't' }, h('b', {}, title), h('span', {}, desc)), h('div', { class: 'sw' + (on ? ' on' : '') }));
 }
@@ -122,6 +136,7 @@ function toggleRow(title, desc, on, fn, ro) {
 function renderLobby() {
   const isHost = S.host === S.you, set = S.settings;
   $('lcode').textContent = session ? session.code : '';
+  paintQR();
   $('pcount').textContent = `(${S.players.length}/${S.max})`;
   const pl = $('plist'); pl.replaceChildren(...S.players.map((p) => h('div', { class: 'pl' },
     (() => { const a = avatarEl(p.avatar); if (p.id === S.you) { a.classList.add('mine'); a.onclick = () => pickAvatar(); } return a; })(),
@@ -133,6 +148,10 @@ function renderLobby() {
   const send = (o) => tx({ t: 'settings', ...o });
   const house = Object.entries(META.house);
   rb.replaceChildren(
+    h('div', { class: 'lbl' }, 'Quick setups' + (ro ? ' (host picks)' : '')),
+    h('div', { class: 'presets' + (ro ? ' ro' : '') }, PRESETS.map((p) => h('button', { onclick: () => !ro && send(p.set()) }, h('b', {}, p.icon + ' ' + p.name), h('small', {}, p.desc)))),
+    h('div', { class: 'tog' + (ro ? ' ro' : ''), style: 'flex-wrap:wrap' }, h('div', { class: 't' }, h('b', {}, 'Match'), h('span', {}, 'Play several rounds. First to this many round wins takes the match.')),
+      h('div', { class: 'seg' }, [[0, 'Single'], [2, 'First to 2'], [3, 'First to 3'], [5, 'First to 5']].map(([v, l]) => h('button', { class: (set.match || 0) === v ? 'on' : '', onclick: () => !ro && send({ match: v }) }, l)))),
     toggleRow('Stack +2 / +4', 'Answer a +2 with another +2 (or +4 with +4) and pass the penalty on.', set.stacking, () => send({ stacking: !set.stacking }), ro),
     toggleRow('Combo play', 'Play two or more cards with the same number together, even in different colors. At least one must match the top card, and you pick which of those colors stays.', set.combos, () => send({ combos: !set.combos }), ro),
     toggleRow('Draw until you can play', 'Nothing that fits the top card? Keep drawing until you get one that does. If you already hold a playable card, a voluntary draw is just one card.', set.drawUntil, () => send({ drawUntil: !set.drawUntil }), ro),
@@ -265,7 +284,7 @@ function renderCenter() {
   kids.push(top);
   if (S.pending) kids.push(h('div', { class: 'pend' }, '+' + S.pending));
   $('disc').replaceChildren(...kids);
-  const cp = $('cpill'); cp.className = 'cpill ' + S.color; cp.textContent = CNAME[S.color];
+  const cp = $('cpill'); cp.className = 'cpill ' + S.color; cp.textContent = (S.lock ? '🔒 ' : '') + CNAME[S.color];
 }
 
 function renderTable(me) {
@@ -274,6 +293,14 @@ function renderTable(me) {
   const myTurn = S.turn === S.you && S.phase === 'playing' && !dealing;
   renderSeats(me);
   renderCenter();
+
+  // spy panel: only the spy ever receives this
+  const sp = $('spy');
+  if (S.spy && spyHidden !== S.spy.target + ':' + S.turnNo + ':' + S.round) {
+    sp.classList.add('on');
+    fill(sp, h('div', { class: 'sh' }, h('b', {}, `👁 ${S.spy.name}'s hand`), h('span', {}, ` (${S.spy.hand.length} card${S.spy.hand.length === 1 ? '' : 's'}, live until your next turn)`), h('button', { onclick: () => { spyHidden = S.spy.target + ':' + S.turnNo + ':' + S.round; sp.classList.remove('on'); } }, '✕')),
+      h('div', { class: 'sc' }, [...S.spy.hand].sort((a, b) => colorIdx(a) - colorIdx(b) || ORDER[a.type] - ORDER[b.type] || (a.value || 0) - (b.value || 0)).map((c) => cardEl(c, { info: false }))));
+  } else sp.classList.remove('on');
 
   // played history: collapsed by default, tap to expand
   const hs = $('hist'); const last = S.played[S.played.length - 1];
@@ -401,6 +428,18 @@ function renderChallenge() {
   tickTimer();
 }
 
+// ---------- reactions ----------
+function showReaction(pid, e) {
+  if (FX.lowMotion() || !S || S.phase === 'lobby') return;
+  const seat = document.querySelector(`.seat[data-pid="${pid}"]`); if (!seat) return;
+  const el = h('div', { class: 'react' }, e);
+  el.style.left = seat.style.left; el.style.top = seat.style.top; $('fxl').append(el);
+  setTimeout(() => el.remove(), 2600);
+}
+function toggleReactTray() {
+  const t = $('reacts'); if (t.classList.toggle('on')) fill(t, (META.reactions || []).map((e) => h('button', { onclick: () => { tx({ t: 'react', e }); t.classList.remove('on'); } }, e)));
+}
+
 // ---------- events play one after another, at a human pace ----------
 let evQ = [], evBusy = false;
 const involvesMe = (e) => e.type === 'shuffle' || e.type === 'rotate' || (e.type === 'swap' && (e.a === S.you || e.b === S.you));
@@ -471,6 +510,8 @@ function showEvent(e) {
   else if (e.type === 'draw' && e.n >= 4 && !e.self) kids = [`${nm(e.to)} draws ${e.n}!`];
   else if (e.type === 'busted') kids = ['🚨 BUSTED!', h('div', { style: 'font-size:14px;font-weight:600' }, `${nm(e.by)} was holding`), cardEl(e.card, { info: false }), `${nm(e.by)} draws ${e.n}`];
   else if (e.type === 'failed') kids = [`Wrong call! ${nm(e.to)} draws ${e.n}`];
+  else if (e.type === 'spy') kids = [e.target === S.you ? `👁 ${nm(e.by)} is looking at YOUR hand!` : e.by === S.you ? `👁 You are spying on ${nm(e.target)}` : `👁 ${nm(e.by)} is peeking at ${nm(e.target)}'s hand`];
+  else if (e.type === 'lock') kids = [`🔒 Color locked to ${CNAME[e.color].toUpperCase()}`, h('div', { style: 'font-size:14px;font-weight:600' }, `until ${nm(e.by)}'s next turn`)];
   const seat = (id) => document.querySelector(`.seat[data-pid="${id}"]`);
   const at = (id, el) => { const s = seat(id); if (!s) return; el.style.left = s.style.left; el.style.top = s.style.top; $('fxl').append(el); setTimeout(() => el.remove(), 2800); };
   if (e.type === 'reverse') FX.sound('reverse');
@@ -523,9 +564,12 @@ function renderEnd() {
   const board = [...S.players].sort((a, b) => b.wins - a.wins);
   fill($('endBody'),
     h('div', { class: 'win' }, w && w.id === S.you ? '🎉' : '🏁'),
-    h('h2', { style: 'margin:6px 0' }, w ? (w.id === S.you ? 'You win!' : `${w.name} wins!`) : 'Round over'),
-    h('div', { class: 'plist', style: 'margin:14px 0;text-align:left' }, board.map((p) => h('div', { class: 'pl' }, h('span', { class: 'nm' }, p.name + (p.id === S.you ? ' (you)' : '')), h('small', {}, `${p.count} left`), h('b', {}, `🏆 ${p.wins}`)))),
-    isHost ? h('div', {}, h('button', { class: 'primary', style: 'width:100%;margin-bottom:8px', onclick: () => tx({ t: 'start' }) }, 'Next round'), h('button', { style: 'width:100%', onclick: () => tx({ t: 'lobby' }) }, 'Back to lobby / change rules')) : h('p', { class: 'sub' }, 'Waiting for the host…'));
+    S.matchWinner && h('div', { class: 'matchwin' }, '🏆 MATCH WON'),
+    h('h2', { style: 'margin:6px 0' }, S.matchWinner ? (S.matchWinner === S.you ? 'You won the match!' : `${playerOf(S.matchWinner).name} won the match!`) : w ? (w.id === S.you ? 'You win!' : `${w.name} wins!`) : 'Round over'),
+    S.settings.match > 0 && !S.matchWinner && h('p', { class: 'sub', style: 'margin:0' }, `Match: first to ${S.settings.match} round wins`),
+    S.awards && S.awards.length > 0 && h('div', { class: 'awards' }, S.awards.map((a) => h('div', { class: 'aw' }, h('span', { class: 'ai' }, a.icon), h('div', {}, h('b', {}, a.title), h('small', {}, `${a.who === S.you ? 'You' : playerOf(a.who).name} · ${a.note}`))))),
+    h('div', { class: 'plist', style: 'margin:14px 0;text-align:left' }, board.map((p) => h('div', { class: 'pl' }, h('span', { class: 'nm' }, p.name + (p.id === S.you ? ' (you)' : '')), h('small', {}, `${p.count} left`), h('b', {}, `🏆 ${p.wins}${S.settings.match ? '/' + S.settings.match : ''}`)))),
+    isHost ? h('div', {}, h('button', { class: 'primary', style: 'width:100%;margin-bottom:8px', onclick: () => tx({ t: 'start' }) }, S.matchWinner ? 'Start a new match' : 'Next round'), h('button', { style: 'width:100%', onclick: () => tx({ t: 'lobby' }) }, 'Back to lobby / change rules')) : h('p', { class: 'sub' }, 'Waiting for the host…'));
 }
 
 // ---------- menus ----------
@@ -774,6 +818,7 @@ $('btnStart').onclick = () => tx({ t: 'start' });
 $('btnRules').onclick = showRules;
 $('btnMenu').onclick = showMenu;
 $('btnLog').onclick = showLog;
+$('btnReact').onclick = toggleReactTray;
 $('logl').onclick = showLog;
 $('btnLogX').onclick = () => overlay('ovLog', false);
 for (const id of ['ovPick', 'ovRules', 'ovMenu', 'ovAv', 'ovLog']) $(id).addEventListener('click', (e) => { if (e.target.id === id) overlay(id, false); });
