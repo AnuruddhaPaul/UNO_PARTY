@@ -7,6 +7,8 @@ const { WebSocketServer } = require('ws');
 const { Game, HOUSE_CARDS, MAX_PLAYERS, botMove, apply } = require('./game');
 
 const PORT = process.env.PORT || 3000;
+const SEC = Number(process.env.SEC_MS) || 1000;           // tests shrink this to run timers fast
+const CHALLENGE_SEC = 10;                                    // time the target has to accept / challenge
 const MAX_ROOMS = Number(process.env.MAX_ROOMS) || 50;   // free-tier friendly
 const PUBLIC = path.join(__dirname, '..', 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -43,25 +45,40 @@ const clean = (s) => String(s || '').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().s
 const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 
 function broadcast(room) {
+  scheduleAuto(room);   // first, so the deadline is part of what every phone receives
   for (const [pid, ws] of room.socks) send(ws, { t: 'state', ...room.game.view(pid) });
-  scheduleAuto(room);
 }
 
-// Bots and disconnected players are played automatically so the table never stalls.
+// Turn timer, bots and absent players: whoever has to decide is played automatically
+// when time runs out, so the table never stalls. The deadline is fixed per decision
+// point (turnNo), so unrelated broadcasts do not extend anybody's time.
 function scheduleAuto(room) {
   clearTimeout(room.autoTimer);
   const g = room.game;
-  if (g.phase !== 'playing') return;
-  const cur = g.current;
-  if (!cur.bot && cur.connected) return;
+  if (g.phase !== 'playing') { g.deadline = 0; room.key = null; room.deadline = 0; return; }
+  const ch = g.challenge;
+  const actor = ch ? g.byId(ch.target) : g.current;
+  const key = g.turnNo + (ch ? 'c' : '');
+  if (room.key !== key) { room.key = key; room.deadline = 0; }
+  let delay;
+  if (actor.bot) delay = (ch ? 2000 : 1300);
+  else if (!actor.connected) delay = ch ? 2500 : 6000;
+  else if (ch) delay = CHALLENGE_SEC * SEC;
+  else if (g.settings.timer > 0) delay = g.settings.timer * SEC;
+  else { g.deadline = 0; return; }
+  if (!room.deadline) room.deadline = Date.now() + delay;
+  g.deadline = room.deadline;
   room.autoTimer = setTimeout(() => {
     try {
-      if (g.phase !== 'playing' || g.current.id !== cur.id) return;
-      if (cur.bot) apply(g, cur.id, botMove(g, cur.id));
-      else { if (g.canPass(cur)) g.pass(cur.id); else g.draw(cur.id); }   // absent human: draw and pass
+      if (g.phase !== 'playing') return;
+      if (ch) { if (g.challenge && g.challenge.target === actor.id) g.respond(actor.id, actor.bot ? Math.random() < 0.3 : false); }
+      else if (g.current.id === actor.id) {
+        if (actor.bot) apply(g, actor.id, botMove(g, actor.id));
+        else { if (g.canPass(actor)) g.pass(actor.id); else g.draw(actor.id); }   // out of time: draw and pass
+      }
     } catch (e) { /* ignore */ }
     broadcast(room);
-  }, cur.bot ? 1300 : 6000);
+  }, Math.max(0, room.deadline - Date.now()));
 }
 
 function join(ws, msg) {
@@ -72,7 +89,7 @@ function join(ws, msg) {
   if (msg.t === 'create') {
     if (rooms.size >= MAX_ROOMS) return send(ws, { t: 'error', msg: 'Server is busy, try again in a few minutes.' });
     code = newCode();
-    room = { game: new Game(), socks: new Map(), tokens: new Map(), idleSince: null, autoTimer: null };
+    room = { game: new Game(), socks: new Map(), tokens: new Map(), idleSince: null, autoTimer: null, key: null, deadline: 0 };
     rooms.set(code, room);
   } else {
     room = rooms.get(code);
@@ -106,6 +123,9 @@ function handle(ws, msg) {
         const s = g.settings;
         if (typeof msg.stacking === 'boolean') s.stacking = msg.stacking;
         if (typeof msg.lateJoin === 'boolean') s.lateJoin = msg.lateJoin;
+        if (typeof msg.combos === 'boolean') s.combos = msg.combos;
+        if (typeof msg.challenges === 'boolean') s.challenges = msg.challenges;
+        if ([0, 15, 30, 45, 60].includes(msg.timer)) s.timer = msg.timer;
         if (Array.isArray(msg.houseCards)) s.houseCards = msg.houseCards.filter((k) => HOUSE_CARDS[k]);
         if (msg.handSize >= 3 && msg.handSize <= 10) s.handSize = msg.handSize | 0;
         break;
@@ -137,6 +157,8 @@ function handle(ws, msg) {
         break;
       }
       case 'play': g.play(pid, msg.cardId, { color: msg.color, target: msg.target }); break;
+      case 'playmany': g.playMany(pid, msg.cardIds, { color: msg.color }); break;
+      case 'respond': g.respond(pid, !!msg.challenge); break;
       case 'draw': g.draw(pid); break;
       case 'pass': g.pass(pid); break;
       case 'uno': g.callUno(pid); break;
@@ -176,4 +198,4 @@ setInterval(() => {
 }, 20000);
 
 if (require.main === module) server.listen(PORT, '0.0.0.0', () => console.log(`UNO party running on port ${PORT}`));
-module.exports = { server, rooms };
+module.exports = { server, rooms, broadcast };

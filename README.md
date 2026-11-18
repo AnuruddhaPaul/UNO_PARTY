@@ -19,6 +19,15 @@ Phones on mobile data cannot reach your laptop directly, so the server needs a p
 
 Vercel / Netlify will NOT work: they cannot hold WebSocket connections open.
 
+## Rules added in round 1
+- **Combo play:** play 2+ number cards with the same number together, any colors. One must match the top card, you pick which of the played colors stays. Host toggle.
+- **Challenge rules:** Wild +4 and the new **Draw 12** can be played any time. The player they hit may challenge.
+  Wild +4: caught = thrower draws 4, wrong challenge = challenger draws 6 and is skipped (classic).
+  Draw 12: caught (thrower held ANY other playable card, wilds and custom cards count) = thrower draws 16, wrong challenge = challenger draws 16.
+  No answer in 10 s counts as accept. The server never sends whether the thrower was bluffing; it only judges when challenged.
+- **Turn timer:** off / 15 / 30 / 45 / 60 s. Out of time = draw and pass.
+- **Hold any card** to see it enlarged with its rule text. The screen is kept awake while playing.
+
 ## How a game goes
 Create game, share the 4-letter code or invite link, host picks the rules, Start. People can join while a round is running.
 If a phone drops, it reconnects to the same hand; a player who stays offline is auto-skipped (draw and pass) after 6 s.
