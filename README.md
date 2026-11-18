@@ -52,3 +52,11 @@ On by default, switch in the lobby. If nothing in your hand fits the top card, D
 - Menu has **Sound** and **Effects: reduced** switches. The app has a web manifest so it can be added to the home screen.
 
 - **Card flights:** drawn cards fly from the deck to the player who took them (to your own hand if it is you, face down to opponents). Played cards fly from the hand or seat to the pile and land face up. Worked out on each phone by comparing the new game state with the previous one; turned off by Effects: reduced.
+
+## Round 3a: human pace, deal intro, hand-change notices
+
+- **Pace:** bots wait about 1.6 s plus however long the phones are still animating the last move. Swaps, rotations and shuffles hold the table for 5 to 8 s. The server computes that wait (`noteBusy` in `server.js`); each event carries its own duration (`EVENT_MS` in `game.js`), so phones and server agree. Time spent animating is not counted against anyone's turn timer.
+- **Shuffle and deal:** at the start of every round the deck is riffled, then dealt one card at a time to each player (up to the starting hand size the host chose), then the first card is turned over. Nobody can act, bots included, until it ends. Spacing between cards shrinks automatically with many players so the deal stays under about 12 s.
+- **Draws:** every card drawn flies from the deck to the player, one after another (up to 14 shown).
+- **Hand changes get a big notice** that cannot be missed (red border when it involves you): Swap Hands names both players and the card counts, Hand Rotate shows everyone, Shuffle Hands lists every player's count and confirms everyone keeps the same number of cards, Pickpocket names thief and victim. The cards fly between the seats; for Shuffle they are collected in the middle, riffled, and dealt back out with the same counts. Your own hand is hidden until the new cards arrive.
+- **Game log:** the 📜 Log button (or tap the two lines above your hand) opens the last 60 things that happened.

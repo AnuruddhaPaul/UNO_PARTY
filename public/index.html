@@ -52,7 +52,7 @@
 
 <!-- TABLE -->
 <section class="screen" id="table">
-  <div class="top"><div class="chip" id="tcode"></div><div class="sp"></div><button id="btnRules">? Rules</button><button id="btnMenu">⋯</button></div>
+  <div class="top"><div class="chip" id="tcode"></div><div class="sp"></div><button id="btnLog" aria-label="Game log">📜 Log</button><button id="btnRules">? Rules</button><button id="btnMenu">⋯</button></div>
   <div class="stage" id="stage">
     <div class="tbl" id="tbl"></div>
     <div class="ctr" id="ctr">
@@ -79,6 +79,8 @@
 <div class="ov" id="ovMenu"><div class="sheet" id="menuBody"></div></div>
 <div class="ov center" id="ovChallenge"><div class="modal" id="chBody"></div></div>
 <div class="ov center" id="ovInfo" style="pointer-events:none"><div class="modal infoTxt" id="infoBody"></div></div>
+<div class="ov" id="ovLog"><div class="sheet"><h3>Game log</h3><p>Everything that happens, in order.</p><div class="logbox" id="logBody"></div><button style="width:100%;margin-top:10px" id="btnLogX">Close</button></div></div>
+<div class="big" id="big"></div>
 <div class="ov" id="ovAv"><div class="sheet" id="avBody"></div></div>
 <div class="flash" id="flash"></div>
 <div class="evt" id="evt"></div>

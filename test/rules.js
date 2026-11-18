@@ -246,6 +246,51 @@ t('draw-until: ends cleanly when the deck and discards run out', () => {
   assert.equal(g.turn, 1);
 });
 
+// ---------- pacing data, events, shuffle / swap / rotate ----------
+t('events: queue keeps order and every event carries a duration', () => {
+  const g = setup(num('yellow', 1), 0, [[num('yellow', 2), num('red', 3)], [num('green', 5)]]);
+  g.emit('skip', { who: 'x' }); g.emit('draw', { to: 'x', n: 12 }); g.emit('draw', { to: 'x', n: 2 }); g.emit('draw', { to: 'x', n: 6, self: true });
+  const ev = g.view(g.players[0].id).events;
+  assert.deepEqual(ev.slice(-4).map((e) => e.dur), [1800, 2400, 0, 0]);
+  assert.ok(ev.every((e, i) => i === 0 || e.seq > ev[i - 1].seq));
+});
+t('start: deal timing is published (shuffle, one card at a time, flip)', () => {
+  const g = setup(num('yellow', 1), 0, [[num('yellow', 2)], [num('red', 3)]]);
+  g.start(); const d = g.view(g.players[0].id).deal;
+  assert.ok(d.round >= 1 && d.stagger >= 70 && d.stagger <= 240 && d.total > d.shuffleMs + d.flipMs);
+});
+t('shuffle hands: everyone keeps their count, event lists the sizes, log names them', () => {
+  const sh = mk({ type: 'house', house: 'shuffle' });
+  const g = setup(num('yellow', 1), 0, [[sh, num('red', 3), num('red', 4)], [num('green', 5)], [num('blue', 1), num('blue', 2), num('blue', 3)]], { houseCards: ['shuffle'] });
+  g.play(g.players[0].id, sh.id, { color: 'red' });
+  assert.deepEqual(g.players.map((p) => p.hand.length), [2, 1, 3]);
+  const e = g.event; assert.equal(e.type, 'shuffle'); assert.deepEqual(Object.values(e.sizes), [2, 1, 3]);
+  assert.ok(g.log.some((l) => /same number of cards/.test(l)));
+});
+t('swap hands: event names both players and the cards that moved', () => {
+  const sw = mk({ type: 'house', house: 'swap' });
+  const g = setup(num('yellow', 1), 0, [[sw, num('red', 3), num('red', 4)], [num('green', 5)]], { houseCards: ['swap'] });
+  const [a, b] = g.players.map((p) => p.id);
+  g.play(a, sw.id, { color: 'red', target: b });
+  assert.equal(g.event.type, 'swap'); assert.equal(g.event.a, a); assert.equal(g.event.b, b);
+  assert.equal(g.players[0].hand.length, 1); assert.equal(g.players[1].hand.length, 2);
+  assert.equal(g.event.na, 2, 'two cards travelled a to b'); assert.equal(g.event.nb, 1);
+});
+t('rotate: event lists every pass in the play direction', () => {
+  const ro = mk({ type: 'house', house: 'rotate' });
+  const g = setup(num('yellow', 1), 0, [[ro, num('red', 3)], [num('green', 5)], [num('blue', 1), num('blue', 2)]], { houseCards: ['rotate'] });
+  g.play(g.players[0].id, ro.id, { color: 'red' });
+  const m = g.event.moves; assert.equal(g.event.type, 'rotate'); assert.equal(m.length, 3);
+  assert.deepEqual(m.map((x) => x.n), [1, 1, 2]);
+  assert.equal(m[0].to, g.players[1].id); assert.equal(m[2].to, g.players[0].id);
+});
+t('pickpocket emits a steal event', () => {
+  const pp = mk({ type: 'house', house: 'pickpocket' });
+  const g = setup(num('yellow', 1), 0, [[pp, num('red', 3)], [num('green', 5), num('green', 6)]], { houseCards: ['pickpocket'] });
+  g.play(g.players[0].id, pp.id, { color: 'red', target: g.players[1].id });
+  assert.equal(g.event.type, 'steal'); assert.equal(g.event.from, g.players[1].id);
+});
+
 // ---------- avatars and rooms ----------
 {
   const { cleanAvatar, AVATAR_PNG, ROOMS } = require('../server/game');

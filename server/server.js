@@ -4,10 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { Game, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, MAX_PLAYERS, botMove, apply } = require('./game');
+const { Game, EVENT_MS, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, MAX_PLAYERS, botMove, apply } = require('./game');
 
 const PORT = process.env.PORT || 3000;
 const SEC = Number(process.env.SEC_MS) || 1000;           // tests shrink this to run timers fast
+const PACE = SEC / 1000;                                     // scales animation waits the same way as the timers
 const CHALLENGE_SEC = 10;                                    // time the target has to accept / challenge
 const MAX_ROOMS = Number(process.env.MAX_ROOMS) || 50;   // free-tier friendly
 const PUBLIC = path.join(__dirname, '..', 'public');
@@ -44,7 +45,23 @@ function newCode() {
 const clean = (s) => String(s || '').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 14);
 const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 
+// Work out how long the phones will be busy animating what just happened (cards flying,
+// banners, swaps) so bots and timers wait for it instead of piling the next move on top.
+function noteBusy(room) {
+  const g = room.game, snap = room.snap;
+  const now = { phase: g.phase, seq: g.seq, draw: g.drawPile.length, played: g.played.length, counts: Object.fromEntries(g.players.map((p) => [p.id, p.hand.length])) };
+  room.snap = now;
+  if (!snap || snap.phase !== 'playing' || g.phase !== 'playing') return;
+  const evMs = g.events.filter((e) => e.seq > snap.seq).reduce((a, e) => a + (e.dur || 0), 0);
+  let moved = Math.max(0, g.played.length - snap.played);
+  for (const p of g.players) if (p.id in snap.counts) moved += Math.max(0, p.hand.length - snap.counts[p.id]);
+  const flight = moved ? 700 + Math.min(moved, 24) * 340 : 0;
+  const est = Math.max(evMs, flight);
+  if (est) g.busyUntil = Math.max(g.busyUntil || 0, Date.now() + (est + 300) * PACE);
+}
+
 function broadcast(room) {
+  noteBusy(room);
   scheduleAuto(room);   // first, so the deadline is part of what every phone receives
   for (const [pid, ws] of room.socks) send(ws, { t: 'state', ...room.game.view(pid) });
 }
@@ -61,10 +78,11 @@ function scheduleAuto(room) {
   const key = g.turnNo + (ch ? 'c' : '');
   if (room.key !== key) { room.key = key; room.deadline = 0; }
   let delay;
-  if (actor.bot) delay = (ch ? 2000 : 1300);
-  else if (!actor.connected) delay = ch ? 2500 : 6000;
-  else if (ch) delay = CHALLENGE_SEC * SEC;
-  else if (g.settings.timer > 0) delay = g.settings.timer * SEC;
+  const busy = Math.max(0, (g.busyUntil || 0) - Date.now());   // animations still playing on the phones
+  if (actor.bot) delay = (ch ? 2200 : 1600) + busy;
+  else if (!actor.connected) delay = (ch ? 2500 : 6000) + busy;
+  else if (ch) delay = CHALLENGE_SEC * SEC + busy;
+  else if (g.settings.timer > 0) delay = g.settings.timer * SEC + busy;
   else { g.deadline = 0; return; }
   if (!room.deadline) room.deadline = Date.now() + delay;
   g.deadline = room.deadline;
@@ -145,7 +163,7 @@ function handle(ws, msg) {
         g.hostId = pid; g.say(`${g.byId(pid).name} is now the host.`);
         break;
       }
-      case 'start': if (!isHost) throw new Error('Only the host can start.'); g.start(); break;
+      case 'start': if (!isHost) throw new Error('Only the host can start.'); g.start(); g.deal.until = g.busyUntil = Date.now() + g.deal.total * PACE; break;
       case 'lobby': if (!isHost) throw new Error('Only the host.'); g.backToLobby(); break;
       case 'kick': {
         if (!isHost || msg.pid === pid) throw new Error('Not allowed.');

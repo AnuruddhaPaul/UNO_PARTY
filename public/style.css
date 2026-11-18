@@ -222,3 +222,32 @@ body.lowfx .rwrap{transition:none}
 @media (max-height:640px){:root{--cw:52px}.mid{min-height:90px}}
 @media (min-width:700px){:root{--cw:76px}.screen{max-width:560px;margin:0 auto}}
 @keyframes land{40%{scale:1.15}}
+
+/* round 3: big notices, log, hand hiding */
+.big{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 52px);transform:translateX(-50%);width:min(94vw,410px);background:#000e;border:3px solid var(--accent);border-radius:20px;padding:12px 14px;z-index:92;text-align:center;pointer-events:none;opacity:0}
+.big.on{animation:bigin .5s forwards}
+.big.off{animation:bigout .5s forwards}
+.big.mine{border-color:#ff5252;box-shadow:0 0 0 4px #ff525255,0 0 36px #ff5252}
+.big h4{margin:0 0 8px;font-size:20px;letter-spacing:.06em}
+.big .row2{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 8px}
+.big .pa{display:flex;flex-direction:column;align-items:center;font-size:12px;font-weight:700;min-width:52px}
+.big .pa small{font-weight:600;color:#ffd23f;font-size:11px}
+.big .pa .av{width:52px;height:52px;border-radius:50%;background:#fff;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden}
+.big .av img{width:100%;height:100%;object-fit:cover;display:block}
+.big.sm .pa{min-width:40px;font-size:10px}
+.big.sm .pa .av{width:34px;height:34px;font-size:18px;border-width:2px}
+.big .arrows{font-size:36px;font-weight:900;animation:sway 1s ease-in-out infinite}
+.big .arrows.s{font-size:20px;opacity:.7}
+.big p{margin:8px 0 0;font-size:14px;color:#dfe3f5;line-height:1.3}
+@keyframes bigin{from{opacity:0;transform:translateX(-50%) translateY(-24px) scale(.9)}to{opacity:1;transform:translateX(-50%)}}
+@keyframes bigout{from{opacity:1;transform:translateX(-50%)}to{opacity:0;transform:translateX(-50%) translateY(-14px)}}
+@keyframes sway{50%{transform:translateX(7px)}}
+.hand.hide .card{opacity:0}
+.hand.reveal .card{animation:land .55s}
+.logbox{max-height:58vh;overflow-y:auto;background:#0003;border-radius:12px;padding:4px 12px}
+.logrow{padding:7px 0;border-top:1px solid var(--panel2);font-size:14px;line-height:1.3}
+.logrow:first-child{border-top:0}
+.logrow.new{color:var(--accent);font-weight:700}
+.logl{cursor:pointer}
+body.lowfx .big{animation:none!important;opacity:1}
+body.lowfx .big.off{opacity:0}

@@ -37,6 +37,10 @@ function cleanAvatar(a) {
 }
 const randomAvatar = () => 'p:' + AVATAR_PNG[Math.floor(Math.random() * AVATAR_PNG.length)];
 
+// How long each kind of event stays on screen (ms). Used by the phones and by the server's pacing.
+const EVENT_MS = { swap: 5600, rotate: 6000, shuffle: 7800, steal: 3200, busted: 3000, failed: 2600, skip: 1800, reverse: 1800, combo: 1600, bigdraw: 2400, win: 0 };
+const DEAL = { shuffleMs: 1900, flipMs: 1100, flightMs: 700 };
+
 const DEFAULT_SETTINGS = () => ({
   room: 'living',                  // backdrop behind the table, chosen by the host
   stacking: false,                 // +2 on +2, +4 on +4
@@ -99,14 +103,20 @@ class Game {
     this.challenge = null;      // open Wild+4 / Draw 12 challenge (see beginChallenge)
     this.winnerId = null;
     this.deadline = 0;          // set by the server: ms epoch when the current decision times out
-    this.seq = 0; this.event = null;
+    this.seq = 0; this.event = null; this.events = [];   // events: recent happenings the phones animate, in order
+    this.round = 0; this.deal = null; this.busyUntil = 0;
     this.log = [];
     this.nextPid = 1;
   }
 
   // ---- helpers ------------------------------------------------------------
-  say(text) { this.log.push(text); if (this.log.length > 40) this.log.shift(); }
-  emit(type, data = {}) { this.seq++; this.event = { seq: this.seq, type, ...data }; }
+  say(text) { this.log.push(text); if (this.log.length > 80) this.log.shift(); }
+  // dur = how long the phones keep this on screen. Bots and timers wait for it, so nobody is rushed.
+  emit(type, data = {}) {
+    const dur = data.dur !== undefined ? data.dur : type === 'draw' ? (data.n >= 4 && !data.self ? EVENT_MS.bigdraw : 0) : (EVENT_MS[type] || 0);
+    this.seq++; this.event = { seq: this.seq, type, ...data, dur };
+    this.events.push(this.event); if (this.events.length > 12) this.events.shift();
+  }
   byId(id) { return this.players.find((p) => p.id === id); }
   get current() { return this.players[this.turn]; }
   idx(id) { return this.players.findIndex((p) => p.id === id); }
@@ -177,6 +187,13 @@ class Game {
     this.turn = Math.floor(Math.random() * this.players.length);
     this.phase = 'playing';
     this.say(`New round. ${this.current.name} goes first.`);
+    // the phones shuffle and deal card by card; nobody (bots included) may act until that is over
+    const cards = this.players.length * this.settings.handSize;
+    const stagger = Math.max(70, Math.min(240, Math.round(9000 / cards)));
+    const total = DEAL.shuffleMs + cards * stagger + DEAL.flightMs + DEAL.flipMs;
+    this.round++;
+    this.deal = { round: this.round, stagger, shuffleMs: DEAL.shuffleMs, flipMs: DEAL.flipMs, flightMs: DEAL.flightMs, total, until: 0 };
+    this.busyUntil = 0;     // the server sets the real clock (it may scale time for tests)
   }
 
   backToLobby() { this.phase = 'lobby'; this.winnerId = null; this.challenge = null; }
@@ -381,20 +398,25 @@ class Game {
       case 'swap': {
         [p.hand, target.hand] = [target.hand, p.hand];
         p.called = false; target.called = false;
-        this.say(`${p.name} and ${target.name} swapped hands.`);
+        this.say(`${p.name} (now ${p.hand.length} cards) and ${target.name} (now ${target.hand.length}) swapped hands.`);
+        this.emit('swap', { a: p.id, b: target.id, na: target.hand.length, nb: p.hand.length });
         return this.advance(1);
       }
       case 'rotate': {
         const hands = this.players.map((q) => q.hand);
+        const moves = this.players.map((q, i) => ({ from: q.id, to: this.players[(((i + this.dir) % n) + n) % n].id, n: hands[i].length }));
         this.players.forEach((q, i) => { q.hand = hands[(((i - this.dir) % n) + n) % n]; q.called = false; });
-        this.say('Everyone passed their hand along.');
+        this.say(`Everyone passed their whole hand ${this.dir === 1 ? 'clockwise' : 'anti-clockwise'}.`);
+        this.emit('rotate', { by: p.id, dir: this.dir, moves });
         return this.advance(1);
       }
       case 'shuffle': {
         const sizes = this.players.map((q) => q.hand.length);
         const pool = shuffle(this.players.flatMap((q) => q.hand));
         this.players.forEach((q, i) => { q.hand = pool.splice(0, sizes[i]); q.called = false; });
-        this.say('All hands were shuffled and re-dealt.');
+        const sz = {}; this.players.forEach((q, i) => { sz[q.id] = sizes[i]; });
+        this.say(`All hands were pooled, shuffled and re-dealt. Everyone keeps the same number of cards: ${this.players.map((q, i) => `${q.name} ${sizes[i]}`).join(', ')}.`);
+        this.emit('shuffle', { by: p.id, sizes: sz });
         return this.advance(1);
       }
       case 'sniper': {
@@ -412,6 +434,7 @@ class Game {
           const c = target.hand.splice(Math.floor(Math.random() * target.hand.length), 1)[0];
           p.hand.push(c); p.called = false; target.called = false;
           this.say(`${p.name} stole a card from ${target.name}.`);
+          this.emit('steal', { from: target.id, to: p.id });
         }
         return this.advance(1);
       }
@@ -431,7 +454,7 @@ class Game {
       }
       case 'groupdraw': {
         for (const q of this.players) if (q.id !== p.id) this.drawInto(q, 1);
-        this.say('Everyone else draws 1.');
+        this.say('Everyone else draws 1 card.');
         return this.advance(1);
       }
       case 'dump': {
@@ -551,8 +574,11 @@ class Game {
       challenge: ch ? { kind: ch.kind, by: ch.by, target: ch.target, amount: ch.amount, caught: ch.caught, fail: ch.fail } : null,
       ms: this.deadline ? Math.max(0, this.deadline - Date.now()) : 0,
       event: this.event,
+      events: this.events.slice(-8),
+      round: this.round,
+      deal: this.deal && this.phase === 'playing' ? { ...this.deal, left: Math.max(0, (this.deal.until || 0) - Date.now()) } : null,
       winner: this.winnerId,
-      log: this.log.slice(-6),
+      log: this.log.slice(-60),
     };
   }
 }
@@ -605,4 +631,4 @@ function apply(game, pid, a) {
   else if (a.kind === 'pass') game.pass(pid);
 }
 
-module.exports = { Game, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, cleanAvatar, COLORS, MAX_PLAYERS, botMove, apply, cardLabel, nameOf };
+module.exports = { EVENT_MS, Game, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, cleanAvatar, COLORS, MAX_PLAYERS, botMove, apply, cardLabel, nameOf };

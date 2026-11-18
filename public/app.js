@@ -9,6 +9,8 @@ let selIds = [];             // selected card ids in hand (more than one = combo
 let lastHold = 0, recvAt = 0, lastSeq;   // press-and-hold timestamp, state arrival time, last event shown
 let pick = null;              // {card,color,target}
 let prevTurn = null;
+let curRects = {}, curPrev = null, flownSeq = 0;   // pre-render hand positions, previous state
+let dealing = null, dealtRound = 0;       // the shuffle-and-deal intro in progress
 
 const $ = (id) => document.getElementById(id);
 function h(tag, attrs, ...kids) {
@@ -58,15 +60,19 @@ function onMsg(m) {
   } else if (m.t === 'state') {
     const prev = S, rects = {};
     if (prev) document.querySelectorAll('#hand .card').forEach((el) => { rects[el.dataset.id] = el.getBoundingClientRect(); });
-    S = m; recvAt = performance.now(); render(); keepAwake();
-    try { flyDiff(prev, m, rects); } catch (e) { /* animations are decoration only */ }
+    curRects = rects; curPrev = prev;
+    S = m; recvAt = performance.now();
+    const dealNew = maybeDeal(prev);
+    render(); keepAwake();
+    if (dealNew) runDeal(dealNew);
+    else { const sp = (m.events || []).filter((e) => (e.seq > (flownSeq || 0)) && ['swap', 'rotate', 'shuffle'].includes(e.type)).pop(); if (m.events && m.events.length) flownSeq = m.events[m.events.length - 1].seq; try { flyDiff(prev, m, rects, sp ? { by: sp.by || sp.a } : null); } catch (e) { /* animations are decoration only */ } }
   }
   else if (m.t === 'error') {
     toast(m.msg);
     if (m.code === 'noroom') { session = null; localStorage.removeItem('uno.session'); S = null; paintScene(false); show('home'); }
   } else if (m.t === 'kicked' || m.t === 'left') { leaveLocal(); if (m.t === 'kicked') toast('You were removed from the room.'); }
 }
-function leaveLocal() { session = null; S = null; selIds = []; lastSeq = undefined; localStorage.removeItem('uno.session'); history.replaceState(null, '', location.pathname); overlay('ovEnd', false); overlay('ovMenu', false); paintScene(false); show('home'); }
+function leaveLocal() { evQ = []; evBusy = false; dealing = null; session = null; S = null; selIds = []; lastSeq = undefined; localStorage.removeItem('uno.session'); history.replaceState(null, '', location.pathname); overlay('ovEnd', false); overlay('ovMenu', false); paintScene(false); show('home'); }
 
 // ---------- cards ----------
 function sym(c) {
@@ -102,8 +108,9 @@ const ORDER = { num: 0, skip: 1, reverse: 2, draw2: 3, wild: 4, wild4: 5, house:
 function render() {
   if (!S) return;
   const me = S.players.find((p) => p.id === S.you);
-  if (lastSeq === undefined) lastSeq = S.event ? S.event.seq : 0;
-  else if (S.event && S.event.seq > lastSeq) { lastSeq = S.event.seq; showEvent(S.event); }
+  const evs = S.events || (S.event ? [S.event] : []);
+  if (lastSeq === undefined) lastSeq = evs.length ? evs[evs.length - 1].seq : 0;
+  else for (const e of evs) if (e.seq > lastSeq) { lastSeq = e.seq; queueEvent(e); }
   if (S.phase === 'lobby') { paintScene(false); show('lobby'); overlay('ovEnd', false); overlay('ovChallenge', false); renderLobby(); }
   else { show('table'); renderTable(me); }
 }
@@ -193,10 +200,11 @@ function renderSeats(me) {
   const cur = S.challenge ? S.challenge.target : S.turn;
   const total = (S.settings.timer || 0) * 1000;
   const seats = S.players.map((_, k) => {
-    const i = (meIdx + k) % L, p = S.players[i];
+    const i = (meIdx + k) % L, p0 = S.players[i];
+    const p = dealing && dealing.counts[p0.id] !== undefined ? { ...p0, count: dealing.counts[p0.id] } : p0;
     const a = Math.PI / 2 + (k * 2 * Math.PI) / L;
     const x = g.W / 2 + g.rx * Math.cos(a), y = g.H / 2 + g.ry * Math.sin(a);
-    const el = h('div', { class: 'seat' + (g.compact ? ' c' : '') + (p.id === cur && S.phase === 'playing' ? ' cur' : '') + (p.id === S.you ? ' me' : '') + (p.connected || p.bot ? '' : ' off'), 'data-pid': p.id, style: `left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;--sc:${SEAT_HUES[i % 15]}` });
+    const el = h('div', { class: 'seat' + (g.compact ? ' c' : '') + (p.id === cur && S.phase === 'playing' && !dealing ? ' cur' : '') + (p.id === S.you ? ' me' : '') + (p.connected || p.bot ? '' : ' off'), 'data-pid': p.id, style: `left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;--sc:${SEAT_HUES[i % 15]}` });
     const av = avatarEl(p.avatar);
     if (g.compact) { av.replaceChildren(h('b', {}, p.count)); av.dataset.cnt = p.count; }
     else {
@@ -209,7 +217,7 @@ function renderSeats(me) {
     }
     prevCount[p.id] = p.count;
     el.append(av, h('div', { class: 'nm' }, (p.bot ? '🤖' : '') + p.name.slice(0, g.compact ? 7 : 12)));
-    if (p.count === 1) el.append(h('div', { class: 'tag' }, 'UNO'));
+    if (p.count === 1 && !dealing) el.append(h('div', { class: 'tag' }, 'UNO'));
     if (!g.compact && p.wins) el.append(h('div', { class: 'win' }, '🏆' + p.wins));
     return el;
   });
@@ -243,12 +251,15 @@ function renderCenter() {
   const d = $('deck'); d.classList.toggle('can', !!S.canDraw);
   d.replaceChildren(...[2, 1, 0].map((k) => { const e = backEl(); e.style.transform = `translate(${-k * 1.5}px,${-k * 1.5}px)`; return e; }), h('div', { class: 'dn' }, `${S.drawCount}`));
   d.onclick = doDraw;
+  if (dealing) { const left = dealing.total - Object.values(dealing.counts).reduce((a, b) => a + b, 0) + (dealing.flip ? 0 : 1); $('deck').querySelector('.dn').textContent = S.drawCount + left; }
   // discard pile: a few UNO backs peeking out under the face-up top card
   const under = Math.min(3, Math.max(0, S.played.length - 1)), n = S.played.length;
   const kids = [];
   for (let k = under; k >= 1; k--) { const e = backEl(); const r = ((n * 53 + k * 37) % 40) - 20; e.style.transform = `rotate(${r}deg) translate(${(k % 2 ? -1 : 1) * 2}px,${k}px)`; kids.push(e); }
+  if (dealing && !dealing.flip) { $('disc').replaceChildren(); $('cpill').className = 'cpill ' + S.color; $('cpill').textContent = ''; $('cpill').style.display = 'none'; return; }
+  $('cpill').style.display = '';
   const top = cardOnTable(S.top); top.classList.add('top'); top.style.transform = `rotate(${((n * 29) % 14) - 7}deg)`;
-  if (lastTop !== S.top.id && lastTop !== null) { FX.sound('play'); top.style.animation = 'land .3s'; }
+  if (lastTop !== S.top.id && lastTop !== null && !dealing) { FX.sound('play'); top.style.animation = 'land .3s'; }
   lastTop = S.top.id;
   if (performance.now() < landUntil) { top.style.opacity = 0; clearTimeout(renderCenter.t); renderCenter.t = setTimeout(revealTop, Math.max(0, landUntil - performance.now())); }
   kids.push(top);
@@ -260,7 +271,7 @@ function renderCenter() {
 function renderTable(me) {
   $('tcode').textContent = session ? session.code : '';
   paintScene(true);
-  const myTurn = S.turn === S.you && S.phase === 'playing';
+  const myTurn = S.turn === S.you && S.phase === 'playing' && !dealing;
   renderSeats(me);
   renderCenter();
 
@@ -277,15 +288,17 @@ function renderTable(me) {
   const bn = $('banner'); bn.className = 'banner' + (myTurn ? ' me' : '');
   const ch = S.challenge, chT = ch && S.players.find((p) => p.id === ch.target);
   if (ch && ch.target === S.you) bn.className = 'banner me';
-  bn.dataset.base = S.phase !== 'playing' ? '' : ch ? (ch.target === S.you ? 'Your call: accept or challenge?' : `${chT ? chT.name : ''} must accept or challenge…`) : myTurn ? (S.drawnId ? 'Play the drawn card or pass' : S.pending ? `Stack a draw card or take +${S.pending}` : 'Your turn') : `${cur ? cur.name : ''}'s turn${cur && !cur.connected && !cur.bot ? ' (offline)' : ''}`;
+  bn.dataset.base = dealing ? (dealing.flip ? 'Turning over the first card…' : Object.values(dealing.counts).every((n) => !n) ? 'Shuffling the deck…' : 'Dealing cards…') : S.phase !== 'playing' ? '' : ch ? (ch.target === S.you ? 'Your call: accept or challenge?' : `${chT ? chT.name : ''} must accept or challenge…`) : myTurn ? (S.drawnId ? 'Play the drawn card or pass' : S.pending ? `Stack a draw card or take +${S.pending}` : 'Your turn') : `${cur ? cur.name : ''}'s turn${cur && !cur.connected && !cur.bot ? ' (offline)' : ''}`;
   tickTimer();
   $('logl').replaceChildren(...S.log.slice(-2).map((t) => h('div', {}, t)));
+  renderLog();
   if (myTurn && prevTurn !== S.you) { if (navigator.vibrate) navigator.vibrate(120); FX.sound('turn'); }
   prevTurn = S.turn;
 
   // hand
   const hand = $('hand'), sx = hand.scrollLeft;
-  const sorted = [...S.hand].sort((a, b) => colorIdx(a) - colorIdx(b) || ORDER[a.type] - ORDER[b.type] || (a.value || 0) - (b.value || 0));
+  const dealtHand = dealing ? S.hand.slice(0, dealing.mine) : S.hand;
+  const sorted = [...dealtHand].sort((a, b) => colorIdx(a) - colorIdx(b) || ORDER[a.type] - ORDER[b.type] || (a.value || 0) - (b.value || 0));
   selIds = selIds.filter((id) => S.hand.some((c) => c.id === id));
   if (!myTurn || S.challenge) selIds = [];
   const sc = selCards(), one = sc.length === 1 && sc[0].type === 'num' ? sc[0] : null;
@@ -314,7 +327,7 @@ function renderTable(me) {
   renderEnd();
 }
 
-function doDraw() { if (S && S.canDraw) tx({ t: 'draw' }); else if (S && S.phase === 'playing') toast(S.turn === S.you ? 'Play or pass first.' : 'Not your turn.'); }
+function doDraw() { if (dealing) return; if (S && S.canDraw) tx({ t: 'draw' }); else if (S && S.phase === 'playing') toast(S.turn === S.you ? 'Play or pass first.' : 'Not your turn.'); }
 
 // ---------- selection / combos ----------
 const selCards = () => selIds.map((id) => S.hand.find((c) => c.id === id)).filter(Boolean);
@@ -387,6 +400,68 @@ function renderChallenge() {
       h('button', { onclick: () => tx({ t: 'respond', challenge: false }) }, `Accept and draw ${c.amount}`, w4 ? h('small', {}, 'and lose your turn') : null)));
   tickTimer();
 }
+
+// ---------- events play one after another, at a human pace ----------
+let evQ = [], evBusy = false;
+const involvesMe = (e) => e.type === 'shuffle' || e.type === 'rotate' || (e.type === 'swap' && (e.a === S.you || e.b === S.you));
+function queueEvent(e) {
+  evQ.push({ e, rects: curRects, prevHand: curPrev && curPrev.hand ? curPrev.hand : [] });
+  if (['swap', 'rotate', 'shuffle'].includes(e.type) && involvesMe(e) && !FX.lowMotion()) $('hand').classList.add('hide');
+  pumpEvents();
+}
+function pumpEvents() {
+  while (!evBusy && evQ.length) {
+    const it = evQ.shift(); let dur = 0;
+    try { dur = playEvent(it) || 0; } catch (err) { dur = 0; }
+    if (dur > 0) { evBusy = true; setTimeout(() => { evBusy = false; pumpEvents(); }, dur); }
+  }
+}
+function unhideHand() { const h = $('hand'); h.classList.remove('hide'); h.classList.add('reveal'); setTimeout(() => h.classList.remove('reveal'), 700); }
+function playEvent(it) {
+  const e = it.e;
+  if (['swap', 'rotate', 'shuffle', 'steal'].includes(e.type)) {
+    bigNotice(it);
+    let end = 0;
+    if (!FX.lowMotion()) { end = e.type === 'swap' ? flySwap(it) : e.type === 'rotate' ? flyRotate(it) : e.type === 'shuffle' ? flyShuffle(it) : flySteal(it); }
+    if (e.type !== 'steal') setTimeout(unhideHand, Math.max(end + 250, 600));
+    setTimeout(() => $('hand').classList.remove('hide'), e.dur + 600);   // safety net
+    return e.dur;
+  }
+  showEvent(e);
+  return e.dur || 0;
+}
+const playerOf = (id) => S.players.find((p) => p.id === id) || { id, name: 'Someone', avatar: null, count: 0 };
+function chipEl(id, note) { const p = playerOf(id); return h('div', { class: 'pa' }, avatarEl(p.avatar), h('span', {}, id === S.you ? 'You' : p.name.slice(0, 9)), note != null && h('small', {}, note)); }
+function bigNotice(it) {
+  const e = it.e, me = S.you, nm = (id) => (id === me ? 'You' : playerOf(id).name);
+  let head, row, sub, mine = false, sm = false;
+  if (e.type === 'swap') {
+    mine = e.a === me || e.b === me; const other = e.a === me ? e.b : e.a;
+    head = '🔄 SWAP HANDS';
+    row = [chipEl(e.a, `${e.nb} card${e.nb === 1 ? '' : 's'} now`), h('div', { class: 'arrows' }, '⇄'), chipEl(e.b, `${e.na} card${e.na === 1 ? '' : 's'} now`)];
+    sub = mine ? `You and ${nm(other)} swapped whole hands. You now hold ${e.a === me ? e.nb : e.na}.` : `${nm(e.a)} and ${nm(e.b)} swapped whole hands.`;
+  } else if (e.type === 'rotate') {
+    mine = true; sm = e.moves.length > 6; const into = e.moves.find((m) => m.to === me);
+    head = `🌀 HAND ROTATE ${e.dir === 1 ? '↻' : '↺'}`;
+    row = e.moves.flatMap((m, i) => [chipEl(m.from, m.n), i < e.moves.length - 1 && h('div', { class: 'arrows s' }, '›')]);
+    sub = `Every hand moves to the next player (${e.dir === 1 ? 'clockwise' : 'anti-clockwise'}).` + (into ? ` You now hold ${into.from === me ? 'your own' : nm(into.from) + "'s"} hand (${into.n}).` : '');
+  } else if (e.type === 'shuffle') {
+    mine = true; sm = Object.keys(e.sizes).length > 6;
+    head = '🔀 HANDS SHUFFLED';
+    row = Object.entries(e.sizes).map(([id, n]) => chipEl(id, `${n} card${n === 1 ? '' : 's'}`));
+    sub = `${nm(e.by)} pooled every card and dealt them out again. Everyone keeps the same number of cards.`;
+  } else {
+    mine = e.from === me || e.to === me;
+    head = '🕵️ PICKPOCKET';
+    row = [chipEl(e.to), h('div', { class: 'arrows' }, '←'), chipEl(e.from)];
+    sub = e.from === me ? 'A card was stolen from YOU.' : e.to === me ? 'You stole a card.' : `${nm(e.to)} stole a card from ${nm(e.from)}.`;
+  }
+  const b = $('big'); fill(b, h('h4', {}, head), h('div', { class: 'row2' }, row), h('p', {}, sub));
+  b.className = 'big on' + (mine ? ' mine' : '') + (sm ? ' sm' : '');
+  clearTimeout(bigNotice.t); bigNotice.t = setTimeout(() => { b.classList.remove('on'); b.classList.add('off'); }, Math.max(1500, e.dur - 600));
+  FX.sound(e.type === 'steal' ? 'bust' : 'reverse');
+}
+
 function showEvent(e) {
   const nm = (id) => { const p = S.players.find((q) => q.id === id); return p ? p.name : 'Someone'; };
   const box = $('evt'); let kids = null;
@@ -412,7 +487,8 @@ function showEvent(e) {
 function tickTimer() {
   if (!S || S.phase !== 'playing') return;
   const actor = S.players.find((p) => p.id === (S.challenge ? S.challenge.target : S.turn));
-  const left = S.ms && actor && !actor.bot && actor.connected ? Math.max(0, Math.ceil((S.ms - (performance.now() - recvAt)) / 1000)) : 0;
+  let left = S.ms && actor && !actor.bot && actor.connected ? Math.max(0, Math.ceil((S.ms - (performance.now() - recvAt)) / 1000)) : 0;
+  const cap = S.challenge ? 10 : S.settings.timer; if (cap && left > cap) left = cap;   // animation time is not counted against you
   const bn = $('banner'); bn.textContent = (bn.dataset.base || '') + (left ? ` · ${left}s` : '');
   const t = $('chTime'); if (t) t.textContent = left ? `${left}s` : '';
   seatPct();
@@ -472,6 +548,13 @@ function showRules() {
     h('button', { style: 'width:100%;margin-top:14px', onclick: () => overlay('ovRules', false) }, 'Close'));
   overlay('ovRules', true);
 }
+function renderLog() {
+  const box = $('logBody'); if (!box || !S) return;
+  const stick = !$('ovLog').classList.contains('on') || box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  fill(box, S.log.map((t, i) => h('div', { class: 'logrow' + (i === S.log.length - 1 ? ' new' : '') }, t)));
+  if (stick) box.scrollTop = box.scrollHeight;
+}
+function showLog() { overlay('ovLog', true); renderLog(); $('logBody').scrollTop = $('logBody').scrollHeight; }
 function showMenu() {
   const isHost = S && S.host === S.you;
   fill($('menuBody'),
@@ -495,8 +578,9 @@ async function share() {
 
 
 // ---------- card flight animations ----------
-// Worked out by comparing the previous state with the new one, so the server sends nothing extra.
-// Opponents' cards travel face down from the deck; a card played to the pile travels face up.
+// Draws and plays are worked out by comparing the previous state with the new one, so the server
+// sends nothing extra. Swaps, rotations and shuffles are driven by their events. Everything is slow
+// on purpose: one card at a time, at a pace a person can follow.
 let landUntil = 0;
 const centerOf = (r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
 function fly(from, to, opts = {}) {
@@ -504,62 +588,178 @@ function fly(from, to, opts = {}) {
   const w = opts.w || 46;
   el.style.cssText += `;--cw:${w}px;position:fixed;left:${-w / 2}px;top:${-w * 0.75}px;z-index:96;pointer-events:none;margin:0`;
   document.body.append(el);
-  const a = centerOf(from), b = centerOf(to), s0 = (from.width && opts.w ? from.width / w : 1);
+  const a = centerOf(from), b = centerOf(to), s0 = from.width && opts.w ? Math.min(1.4, from.width / w) : 1;
   const rot = opts.rot || 0;
   const anim = el.animate([
-    { transform: `translate(${a.x}px,${a.y}px) scale(${s0}) rotate(0deg)`, opacity: 1 },
+    { transform: `translate(${a.x}px,${a.y}px) scale(${s0}) rotate(0deg)`, opacity: 0.9 },
+    { transform: `translate(${(a.x + b.x) / 2}px,${Math.min(a.y, b.y) - 18 + Math.abs(a.y - b.y) / 2}px) scale(${(s0 + (opts.endScale || 1)) / 2 + 0.12}) rotate(${rot / 2}deg)`, opacity: 1, offset: 0.55 },
     { transform: `translate(${b.x}px,${b.y}px) scale(${opts.endScale || 1}) rotate(${rot}deg)`, opacity: 1 },
-  ], { duration: opts.dur || 480, delay: opts.delay || 0, easing: 'cubic-bezier(.25,.8,.3,1)', fill: 'both' });
+  ], { duration: opts.dur || 800, delay: opts.delay || 0, easing: 'cubic-bezier(.3,.7,.35,1)', fill: 'both' });
   anim.onfinish = () => { el.remove(); if (opts.done) opts.done(); };
   return anim;
 }
-function flyDiff(prev, next, rects) {
-  if (!prev || FX.lowMotion() || document.hidden || prev.phase !== 'playing' || next.phase !== 'playing' || !prev.hand) return;
-  const deck = $('deck').getBoundingClientRect(), disc = $('disc').getBoundingClientRect();
+const seatAv = (pid) => { const e = document.querySelector(`.seat[data-pid="${pid}"] .av`); return e ? e.getBoundingClientRect() : null; };
+const handSlot = (i) => { const els = document.querySelectorAll('#hand .card'); return els.length ? els[i % els.length].getBoundingClientRect() : $('hand').getBoundingClientRect(); };
+const deckRect = () => $('deck').getBoundingClientRect();
+const discRect = () => $('disc').getBoundingClientRect();
+const ctrRect = () => $('ctr').getBoundingClientRect();
+const MIN_W = 40;
+
+function flyDiff(prev, next, rects, special) {
+  if (!prev || dealing || FX.lowMotion() || document.hidden || prev.phase !== 'playing' || next.phase !== 'playing' || !prev.hand) return;
+  const deck = deckRect(), disc = discRect();
   if (!deck.width) return;
-  const seatRect = (pid) => { const e = document.querySelector(`.seat[data-pid="${pid}"] .av`); return e ? e.getBoundingClientRect() : null; };
   const oldP = Object.fromEntries(prev.players.map((p) => [p.id, p]));
   const deckDrop = prev.drawCount - next.drawCount;
-  let budget = deckDrop > 0 ? deckDrop : next.drawCount > prev.drawCount ? 99 : 0;   // reshuffle counts as draws, swaps do not
-  const MAX = 8;
+  let budget = deckDrop > 0 ? deckDrop : next.drawCount > prev.drawCount ? 99 : 0;   // a reshuffle counts as draws, swaps do not
 
-  // 1) cards leaving someone's hand for the pile
+  // 1) the played card(s) travel from the hand / seat to the pile
   const added = next.played.length > prev.played.length ? next.played.slice(prev.played.length) : [];
   const myGone = prev.hand.filter((c) => !next.hand.some((x) => x.id === c.id));
-  const gone = []; // {pid, delta}
-  for (const p of next.players) { const o = oldP[p.id]; if (o && p.id !== S.you && p.count < o.count) gone.push({ pid: p.id, n: o.count - p.count }); }
-  if (myGone.length) gone.unshift({ pid: S.you, n: myGone.length });
-  if (added.length && gone.length) {
-    const src = gone[0]; let dur = 520;
-    landUntil = performance.now() + 150 + dur + 140 * Math.min(added.length, 4);
-    added.slice(-4).forEach((e, i) => {
-      const from = src.pid === S.you && myGone[i] && rects[myGone[i].id] ? rects[myGone[i].id] : (seatRect(src.pid) || deck);
-      FX.sound('play');
-      fly(from, disc, { face: e.card, w: 58, delay: i * 140, dur, rot: ((i * 23) % 14) - 7, endScale: 46 / 58, done: i === Math.min(added.length, 4) - 1 ? revealTop : null });
+  let src = null;
+  if (special) src = special.by;
+  else {
+    const g = next.players.find((p) => p.id !== S.you && oldP[p.id] && p.count < oldP[p.id].count);
+    src = myGone.length ? S.you : g ? g.id : null;
+  }
+  const shown = added.slice(-4);
+  if (shown.length && src) {
+    const dur = 850; landUntil = performance.now() + 200 + dur + 320 * shown.length;
+    shown.forEach((e, i) => {
+      const from = src === S.you ? (rects[e.card.id] || (myGone[i] && rects[myGone[i].id]) || deck) : (seatAv(src) || deck);
+      setTimeout(() => FX.sound('play'), 200 + i * 320);
+      fly(from, disc, { face: e.card, w: 58, delay: 200 + i * 320, dur, rot: ((i * 23) % 14) - 7, endScale: 46 / 58, done: i === shown.length - 1 ? revealTop : null });
     });
   }
 
-  // 2) cards coming from the deck into someone's hand
+  // 2) cards coming from the deck, one at a time
   let k = 0;
   const myNew = next.hand.filter((c) => !prev.hand.some((x) => x.id === c.id));
   const draws = [];
   if (myNew.length && budget > 0) { const n = Math.min(myNew.length, budget); draws.push({ pid: S.you, n, cards: myNew.slice(0, n) }); budget -= n; }
   for (const p of next.players) { const o = oldP[p.id]; if (o && p.id !== S.you && p.count > o.count && budget > 0) { const n = Math.min(p.count - o.count, budget); draws.push({ pid: p.id, n }); budget -= n; } }
+  const startAt = shown.length ? 200 + shown.length * 320 + 500 : 250;   // a played card lands before the next one is dealt out
   for (const d of draws) {
-    const n = Math.min(d.n, MAX);
+    const n = Math.min(d.n, 14), step = n > 8 ? 280 : 420;
     for (let i = 0; i < n; i++) {
       let to, el = null;
       if (d.pid === S.you) { el = d.cards[i] ? document.querySelector(`#hand .card[data-id="${d.cards[i].id}"]`) : null; to = el ? el.getBoundingClientRect() : $('hand').getBoundingClientRect(); if (el) el.style.opacity = 0; }
-      else to = seatRect(d.pid);
+      else to = seatAv(d.pid);
       if (!to) continue;
-      const delay = 80 + k++ * 110;
+      const delay = startAt + k++ * step;
       setTimeout(() => FX.sound('draw'), delay);
-      fly(deck, to, { w: d.pid === S.you ? to.width || 58 : 40, delay, dur: 460, endScale: d.pid === S.you ? 1 : 0.7, done: () => { if (el) el.style.opacity = ''; } });
+      fly(deck, to, { w: d.pid === S.you ? to.width || 58 : MIN_W, delay, dur: 800, endScale: d.pid === S.you ? 1 : 0.7, done: () => { if (el) { el.style.opacity = ''; el.style.animation = 'land .35s'; } } });
     }
-    if (d.pid === S.you) setTimeout(() => document.querySelectorAll('#hand .card').forEach((c) => { c.style.opacity = ''; }), 120 + k * 110 + 520);
+    if (d.pid === S.you) setTimeout(() => document.querySelectorAll('#hand .card').forEach((c) => { c.style.opacity = ''; }), startAt + k * 420 + 1000);
   }
 }
-function revealTop() { landUntil = 0; const t = document.querySelector('#disc .card.top'); if (t) { t.style.opacity = ''; t.style.animation = 'land .3s'; } }
+function revealTop() { landUntil = 0; const t = document.querySelector('#disc .card.top'); if (t) { t.style.opacity = ''; t.style.animation = 'land .35s'; } }
+const oldRect = (it, i) => { const c = it.prevHand[i % Math.max(1, it.prevHand.length)]; return c && it.rects[c.id] ? { rect: it.rects[c.id], card: c } : null; };
+
+function flySwap(it) {
+  const e = it.e, me = S.you; let last = 900;
+  [{ from: e.a, to: e.b, n: e.na, off: 0 }, { from: e.b, to: e.a, n: e.nb, off: 220 }].forEach((l) => {
+    const n = Math.min(l.n, 8);
+    for (let i = 0; i < n; i++) {
+      const delay = 900 + i * 380 + l.off; last = Math.max(last, delay + 1100);
+      const old = l.from === me ? oldRect(it, i) : null;
+      const from = old ? old.rect : seatAv(l.from), to = l.to === me ? handSlot(i) : seatAv(l.to);
+      if (from && to) { setTimeout(() => FX.sound('draw'), delay); fly(from, to, { face: old ? old.card : null, w: l.to === me || l.from === me ? 58 : MIN_W, delay, dur: 1100, endScale: l.to === me ? 1 : 0.7 }); }
+    }
+  });
+  return last;
+}
+function flyRotate(it) {
+  const e = it.e, me = S.you, per = e.moves.length > 10 ? 2 : e.moves.length > 6 ? 3 : 4, gap = e.moves.length > 8 ? 120 : 220; let last = 900, k = 0;
+  for (const m of e.moves) {
+    const n = Math.min(m.n, per);
+    for (let i = 0; i < n; i++) {
+      const delay = 900 + k++ * gap; last = Math.max(last, delay + 1100);
+      const old = m.from === me ? oldRect(it, i) : null;
+      const from = old ? old.rect : seatAv(m.from), to = m.to === me ? handSlot(i) : seatAv(m.to);
+      if (from && to) fly(from, to, { face: old ? old.card : null, w: m.to === me || m.from === me ? 58 : MIN_W, delay, dur: 1100, endScale: m.to === me ? 1 : 0.7 });
+    }
+    if (k % 3 === 0) setTimeout(() => FX.sound('draw'), 900 + k * gap);
+  }
+  return last;
+}
+function flyShuffle(it) {
+  const e = it.e, me = S.you, ids = Object.keys(e.sizes), N = ids.length, per = Math.max(1, Math.min(4, Math.floor(24 / N)));
+  const c = ctrRect(), centre = { left: c.left + c.width / 2 - 10, top: c.top + c.height / 2 - 10, width: 20, height: 20 };
+  let k = 0, last = 900;
+  // 1) everybody's cards are collected into the middle
+  for (const id of ids) for (let i = 0; i < Math.min(e.sizes[id], per); i++) {
+    const delay = 900 + k++ * 70; last = Math.max(last, delay + 900);
+    const old = id === me ? oldRect(it, i) : null, from = old ? old.rect : seatAv(id);
+    if (from) fly(from, centre, { face: old ? old.card : null, w: id === me ? 58 : MIN_W, delay, dur: 900, endScale: 0.8 });
+  }
+  setTimeout(() => FX.sound('draw'), 900);
+  // 2) the pile is shuffled in the middle
+  const rs = last + 150; setTimeout(() => riffle(centre, 1700), rs);
+  // 3) and dealt out again, same counts as before
+  k = 0;
+  for (const id of ids) for (let i = 0; i < Math.min(e.sizes[id], per); i++) {
+    const delay = rs + 1900 + k++ * 70; last = Math.max(last, delay + 900);
+    const to = id === me ? handSlot(i) : seatAv(id);
+    if (to) { setTimeout(() => FX.sound('draw'), delay); fly(centre, to, { w: id === me ? 58 : MIN_W, delay, dur: 900, endScale: id === me ? 1 : 0.7 }); }
+  }
+  return last + 200;
+}
+function flySteal(it) { const e = it.e, from = e.from === S.you ? null : seatAv(e.from), to = e.to === S.you ? handSlot(0) : seatAv(e.to); const f = from || seatAv(S.you); if (f && to) fly(f, to, { w: MIN_W, delay: 900, dur: 1000, endScale: 0.8 }); return 2200; }
+
+// a quick riffle: two halves of a pile interleave a few times
+function riffle(at, ms) {
+  FX.sound('shuffle');
+  const loops = Math.max(2, Math.round(ms / 650)), pw = 44, els = [];
+  const x0 = at.left + at.width / 2, y0 = at.top + at.height / 2;
+  for (let i = 0; i < 16; i++) {
+    const el = backEl(); el.style.cssText += `;--cw:${pw}px;position:fixed;left:${x0 - pw / 2}px;top:${y0 - pw * 0.75}px;z-index:95;pointer-events:none;margin:0`;
+    document.body.append(el); els.push(el);
+    const side = i % 2 ? 1 : -1;
+    el.animate(Array.from({ length: loops }).flatMap((_, L) => [
+      { transform: `translate(${side * 30}px,${(i % 4) * -1}px) rotate(${side * 9}deg)`, offset: L / loops },
+      { transform: `translate(${side * 30}px,${(i % 4) * -1}px) rotate(${side * 9}deg)`, offset: (L + 0.15 + (i % 8) * 0.04) / loops },
+      { transform: `translate(0px,${-i * 0.8}px) rotate(${side * 2}deg)`, offset: (L + 0.5 + (i % 8) * 0.04) / loops },
+    ]).concat([{ transform: `translate(0px,${-i * 0.8}px) rotate(0deg)`, offset: 1 }]), { duration: ms, easing: 'ease-in-out', fill: 'both' });
+  }
+  setTimeout(() => els.forEach((e) => e.remove()), ms + 100);
+}
+
+// ---------- shuffle and deal at the start of a round ----------
+function maybeDeal(prev) {
+  const d = S.deal;
+  if (!d || S.phase !== 'playing' || d.round === dealtRound) return null;
+  dealtRound = d.round;
+  if (FX.lowMotion() || document.hidden || d.left < d.total * 0.5) return null;
+  const order = S.players.map((p) => p.id);
+  dealing = { round: d.round, counts: Object.fromEntries(order.map((id) => [id, 0])), mine: 0, flip: false, total: order.length * S.settings.handSize };
+  return { d, order };
+}
+function runDeal({ d, order }) {
+  const rd = dealing, me = S.you, H = S.settings.handSize;
+  const dk = deckRect(); if (!dk.width) { dealing = null; render(); return; }
+  riffle({ left: dk.left + dk.width / 2, top: dk.top + dk.height / 2, width: 0, height: 0 }, d.shuffleMs - 150);
+  let i = 0;
+  for (let r = 0; r < H; r++) for (const pid of order) {
+    const at = d.shuffleMs + i * d.stagger, myIdx = r;
+    i++;
+    setTimeout(() => {
+      if (dealing !== rd) return;
+      const to = pid === me ? handSlot(Math.min(myIdx, Math.max(0, document.querySelectorAll('#hand .card').length - 1))) : seatAv(pid);
+      if (!to) return;
+      FX.sound('draw');
+      fly(deckRect(), to, { w: pid === me ? 56 : MIN_W, dur: d.flightMs, endScale: pid === me ? 1 : 0.6, done: () => { if (dealing !== rd) return; rd.counts[pid]++; if (pid === me) rd.mine++; render(); } });
+    }, at);
+  }
+  // finally the first card is turned over onto the pile
+  setTimeout(() => {
+    if (dealing !== rd) return;
+    rd.flip = true; render();
+    const to = discRect(); const t = S.top;
+    landUntil = performance.now() + d.flightMs + 200; render();
+    fly(deckRect(), to, { face: t, w: 46, dur: d.flightMs, rot: 4, done: () => { if (dealing !== rd) return; dealing = null; FX.sound('play'); revealTop(); render(); } });
+  }, d.shuffleMs + i * d.stagger + d.flightMs + 200);
+}
 
 // ---------- wiring ----------
 const myName = () => ($('name').value.trim() || localStorage.getItem('uno.name') || 'Player');
@@ -573,7 +773,10 @@ $('btnBot').onclick = () => tx({ t: 'bot' });
 $('btnStart').onclick = () => tx({ t: 'start' });
 $('btnRules').onclick = showRules;
 $('btnMenu').onclick = showMenu;
-for (const id of ['ovPick', 'ovRules', 'ovMenu', 'ovAv']) $(id).addEventListener('click', (e) => { if (e.target.id === id) overlay(id, false); });
+$('btnLog').onclick = showLog;
+$('logl').onclick = showLog;
+$('btnLogX').onclick = () => overlay('ovLog', false);
+for (const id of ['ovPick', 'ovRules', 'ovMenu', 'ovAv', 'ovLog']) $(id).addEventListener('click', (e) => { if (e.target.id === id) overlay(id, false); });
 
 (async function init() {
   try { META = await (await fetch('/meta')).json(); } catch {}

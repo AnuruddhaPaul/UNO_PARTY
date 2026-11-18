@@ -54,6 +54,7 @@ const FX = (() => {
     bust: () => { tone(220, 0, 0.18, 'sawtooth', 0.12, 90); tone(150, 0.16, 0.25, 'sawtooth', 0.12, 60); },
     storm: () => { tone(110, 0, 0.4, 'sawtooth', 0.1, 50); tone(70, 0.05, 0.5, 'square', 0.06, 40); },
     reverse: () => { tone(400, 0, 0.1, 'triangle', 0.12, 800); tone(800, 0.1, 0.12, 'triangle', 0.1, 400); },
+    shuffle: () => { for (let i = 0; i < 14; i++) tone(1400 + Math.random() * 900, i * 0.11, 0.05, 'square', 0.035); },
     win: () => { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.2, 'triangle', 0.14)); },
   };
   function sound(name) { if (!soundOn() || !SOUNDS[name]) return; wake(); if (ac && ac.state === 'running') { try { SOUNDS[name](); } catch (e) { /* ignore */ } } }
