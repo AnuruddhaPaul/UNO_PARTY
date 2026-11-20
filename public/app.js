@@ -179,6 +179,9 @@ function avatarEl(code, cls = '') {
   else el.textContent = code && code.startsWith('e:') ? code.slice(2) : '🙂';
   return el;
 }
+// Visiting /?vip=KEY once stores the owner's key on this phone and removes it from the address bar.
+(() => { try { const k = new URLSearchParams(location.search).get('vip'); if (k) { localStorage.setItem('uno.vip', k); const u = new URL(location.href); u.searchParams.delete('vip'); history.replaceState(null, '', u.pathname + u.search + u.hash); } } catch (e) { /* ignore */ } })();
+const vipKey = () => localStorage.getItem('uno.vip') || undefined;
 const myAvatar = () => localStorage.getItem('uno.avatar') || '';
 function paintAvBtn() { const b = $('btnAv'); const code = myAvatar() || 'e:🙂'; b.replaceChildren(); if (code.startsWith('p:')) b.append(h('img', { src: `avatars/${code.slice(2)}.png`, alt: '' })); else b.textContent = code.slice(2); }
 function pickAvatar(onDone) {
@@ -808,8 +811,8 @@ function runDeal({ d, order }) {
 // ---------- wiring ----------
 const myName = () => ($('name').value.trim() || localStorage.getItem('uno.name') || 'Player');
 function needName() { const n = $('name').value.trim(); if (!n) { $('name').focus(); toast('Type your name first.'); return null; } localStorage.setItem('uno.name', n); return n; }
-$('btnCreate').onclick = () => { const n = needName(); if (n) connect(() => tx({ t: 'create', name: n, avatar: myAvatar() || undefined })); };
-$('btnJoin').onclick = () => { const n = needName(); const c = $('code').value.trim().toUpperCase(); if (!n) return; if (c.length !== 4) return toast('Enter the 4-letter code.'); session = null; connect(() => tx({ t: 'join', code: c, name: n, avatar: myAvatar() || undefined })); };
+$('btnCreate').onclick = () => { const n = needName(); if (n) connect(() => tx({ t: 'create', name: n, avatar: myAvatar() || undefined, vip: vipKey() })); };
+$('btnJoin').onclick = () => { const n = needName(); const c = $('code').value.trim().toUpperCase(); if (!n) return; if (c.length !== 4) return toast('Enter the 4-letter code.'); session = null; connect(() => tx({ t: 'join', code: c, name: n, avatar: myAvatar() || undefined, vip: vipKey() })); };
 $('btnShare').onclick = share;
 $('btnAv').onclick = () => pickAvatar();
 $('btnLeave').onclick = () => tx({ t: 'leave' });

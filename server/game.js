@@ -65,6 +65,10 @@ const shuffle = (a) => {
   return a;
 };
 
+// The owner's private opening hand (see vip.js): up to 4 very strong cards, Draw 12 always among them.
+// They are extra cards (marked vip) and disappear instead of being reshuffled into the deck.
+const VIP_EXTRA = ['shuffle', 'spy', 'swap', 'rotate', 'colorlock', 'wild4'];
+
 function buildDeck(decks, houseKeys) {
   const cards = [];
   const add = (c) => cards.push({ id: ++_cid, color: null, value: null, house: null, ...c });
@@ -108,7 +112,7 @@ class Game {
     this.deadline = 0;          // set by the server: ms epoch when the current decision times out
     this.seq = 0; this.event = null; this.events = [];   // events: recent happenings the phones animate, in order
     this.round = 0; this.deal = null; this.busyUntil = 0;
-    this.stats = {}; this.awards = []; this.matchWinner = null; this.lock = null; this.spy = null;
+    this.stats = {}; this.awards = []; this.vipIds = new Set(); this.matchWinner = null; this.lock = null; this.spy = null;
     this.log = [];
     this.nextPid = 1;
   }
@@ -129,14 +133,14 @@ class Game {
   get top() { return this.discard[this.discard.length - 1]; }
 
   // ---- lobby --------------------------------------------------------------
-  addPlayer(name, { bot = false, avatar = null } = {}) {
+  addPlayer(name, { bot = false, avatar = null, vip = false } = {}) {
     if (this.players.length >= MAX_PLAYERS) throw new Error(`Room is full (${MAX_PLAYERS} players max).`);
     if (this.phase === 'playing' && !this.settings.lateJoin) throw new Error('Game in progress, late joining is off.');
-    const p = { id: 'p' + this.nextPid++, name, hand: [], connected: true, bot, wins: 0, called: false, avatar: cleanAvatar(avatar) || (bot ? 'p:robot' : randomAvatar()) };
+    const p = { id: 'p' + this.nextPid++, name, hand: [], connected: true, bot, wins: 0, called: false, vip: !!vip && !bot, avatar: cleanAvatar(avatar) || (bot ? 'p:robot' : randomAvatar()) };
     this.players.push(p);
     if (!this.hostId && !bot) this.hostId = p.id;
     if (this.phase === 'playing') {
-      this.drawInto(p, this.settings.handSize);
+      this.drawInto(p, this.settings.handSize); this.giveVip(p);
       this.say(`${p.name} joined the game with ${p.hand.length} cards.`);
     }
     return p;
@@ -153,7 +157,7 @@ class Game {
     if (i < 0) return;
     const [p] = this.players.splice(i, 1);
     // their cards go back under the draw pile so no card is lost
-    this.drawPile.unshift(...shuffle(p.hand));
+    this.drawPile.unshift(...shuffle(p.hand.filter((c) => !this.vipIds.has(c.id))));
     if (this.hostId === id) {
       const nh = this.players.find((q) => !q.bot && q.connected) || this.players.find((q) => !q.bot);
       this.hostId = nh ? nh.id : null;
@@ -183,10 +187,10 @@ class Game {
     this.discard = []; this.played = []; this.log = [];
     this.dir = 1; this.pending = 0; this.pendingType = null; this.drawnId = null;
     this.unoWindow = null; this.winnerId = null; this.challenge = null; this.turnNo = 0;
-    this.lock = null; this.spy = null; this.awards = [];
+    this.lock = null; this.spy = null; this.awards = []; this.vipIds = new Set();
     if (this.matchWinner) { for (const p of this.players) p.wins = 0; this.matchWinner = null; }   // a finished match starts fresh
     for (const p of this.players) { p.hand = []; p.called = false; }
-    for (const p of this.players) this.drawInto(p, this.settings.handSize);
+    for (const p of this.players) { this.drawInto(p, this.settings.handSize); this.giveVip(p); }
     // first card must be a plain number card
     let first;
     do { first = this.drawPile.pop(); if (first.type !== 'num') this.drawPile.unshift(first); } while (first.type !== 'num');
@@ -208,10 +212,21 @@ class Game {
   backToLobby() { this.phase = 'lobby'; this.winnerId = null; this.challenge = null; this.lock = null; this.spy = null; }
 
   // ---- drawing ------------------------------------------------------------
+  giveVip(p) {
+    if (!p.vip || !p.hand.length) return;
+    const k = Math.min(4, p.hand.length);
+    this.drawPile.unshift(...p.hand.splice(p.hand.length - k, k));   // those cards go back under the pile
+    shuffle(this.drawPile);
+    const keys = ['draw12', ...shuffle([...VIP_EXTRA]).slice(0, k - 1)].slice(0, k);
+    for (const key of keys) {
+      const card = key === 'wild4' ? { type: 'wild4', house: null } : { type: 'house', house: key };
+      const c = { id: ++_cid, color: null, value: null, ...card }; this.vipIds.add(c.id); p.hand.push(c);
+    }
+  }
   refill() {
     if (this.drawPile.length > 0 || this.discard.length <= 1) return;
     const top = this.discard.pop();
-    this.drawPile = shuffle(this.discard);
+    this.drawPile = shuffle(this.discard.filter((c) => !this.vipIds.has(c.id)));
     this.discard = [top];
     this.say('Draw pile was empty, discard pile reshuffled.');
   }

@@ -341,6 +341,48 @@ t('awards: earned from real stats, nothing invented', () => {
   assert.deepEqual(none.awards, [], 'a quiet round earns no awards');
 });
 
+// ---------- owner's private opening hand ----------
+const { isVip, norm } = require('../server/vip');
+t('vip: only the owner\'s handle plus the secret key unlocks it', () => {
+  for (const n of ['ANI_MrPaul_72', 'Ani_Paul', 'Onu_Paul', 'ANI_PAUL', 'ANU_PAUL', 'ANI_Mr Paul_72', 'ANU_72', 'anu 72', 'ani-paul']) assert.equal(isVip(n, 'k3y', 'k3y'), true, n);
+  assert.equal(isVip('ANU_72', 'wrong', 'k3y'), false, 'right name, wrong key');
+  assert.equal(isVip('Sam', 'k3y', 'k3y'), false, 'right key, other name');
+  assert.equal(isVip('ANU_72', undefined, 'k3y'), false);
+  assert.equal(isVip('ANU_72', 'anything', undefined), false, 'no secret set means the feature is off');
+  assert.equal(isVip('ANU_72', '', ''), false);
+});
+t('vip: 4 strong cards plus normal ones, hand size unchanged, nobody else affected', () => {
+  const g = new Game({ handSize: 7, challenges: false });
+  const v = g.addPlayer('ANU_72', { vip: true }), o = g.addPlayer('Sam'); g.start();
+  assert.equal(v.hand.length, 7); assert.equal(o.hand.length, 7);
+  const sp = v.hand.filter((c) => g.vipIds.has(c.id));
+  assert.equal(sp.length, 4); assert.ok(sp.some((c) => c.house === 'draw12'), 'Draw 12 is always there');
+  assert.equal(new Set(sp.map((c) => c.house || c.type)).size, 4, 'four different cards');
+  assert.ok(o.hand.every((c) => !g.vipIds.has(c.id)));
+  assert.ok(!('vip' in g.view(o.id).players.find((p) => p.id === v.id)), 'the flag is never sent to phones');
+  assert.ok(!JSON.stringify(g.view(o.id)).includes('"vip"'));
+});
+t('vip: a small hand is all special cards', () => {
+  const g = new Game({ handSize: 3 });
+  const v = g.addPlayer('Onu_Paul', { vip: true }); g.addPlayer('Sam'); g.start();
+  assert.equal(v.hand.length, 3); assert.ok(v.hand.every((c) => g.vipIds.has(c.id)));
+});
+t('vip: the extra cards vanish when played instead of being shuffled into the deck', () => {
+  const g = new Game({ handSize: 5 }); const v = g.addPlayer('ANU_72', { vip: true }); g.addPlayer('Sam'); g.start();
+  const total = () => g.drawPile.length + g.discard.length + g.players.reduce((a, p) => a + p.hand.length, 0);
+  const ids = [...g.vipIds]; g.discard.push(...g.players[0].hand.filter((c) => g.vipIds.has(c.id)));
+  g.players[0].hand = g.players[0].hand.filter((c) => !g.vipIds.has(c.id));
+  g.discard.push(num('red', 1));            // a normal card is now on top of the pile
+  g.drawPile.length = 0; g.refill();
+  assert.ok(![...g.drawPile, ...g.discard].some((c) => ids.includes(c.id)), 'vip cards are gone for good');
+});
+t('vip: Draw 12 works even with challenges switched off', () => {
+  const d12 = mk({ type: 'house', house: 'draw12' });
+  const g = setup(num('yellow', 1), 0, [[d12, num('red', 3)], [num('green', 5)]], { challenges: false });
+  g.play(g.players[0].id, d12.id, { color: 'red', target: g.players[1].id });
+  assert.equal(g.players[1].hand.length, 13);
+});
+
 // ---------- avatars and rooms ----------
 {
   const { cleanAvatar, AVATAR_PNG, ROOMS } = require('../server/game');

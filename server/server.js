@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const { isVip } = require('./vip');
 const { Game, EVENT_MS, HOUSE_CARDS, AVATAR_EMOJI, AVATAR_PNG, ROOMS, MAX_PLAYERS, botMove, apply } = require('./game');
 
 const PORT = process.env.PORT || 3000;
@@ -120,7 +121,7 @@ function join(ws, msg) {
     p = g.byId(msg.pid); p.connected = true;
     const old = room.socks.get(p.id); if (old && old !== ws) { old.pid = null; old.close(); }
   } else {
-    try { p = g.addPlayer(name, { avatar: msg.avatar }); } catch (e) { return send(ws, { t: 'error', msg: e.message }); }
+    try { p = g.addPlayer(name, { avatar: msg.avatar, vip: isVip(name, msg.vip) }); } catch (e) { return send(ws, { t: 'error', msg: e.message }); }
     room.tokens.set(p.id, crypto.randomBytes(12).toString('hex'));
     g.say(`${p.name} joined.`);
   }
